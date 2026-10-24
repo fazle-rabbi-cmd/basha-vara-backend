@@ -1,0 +1,265 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  TENANT
+  LANDLORD
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum PropertyType {
+  APARTMENT
+  FLAT
+  HOUSE
+  STUDIO
+  ROOM
+}
+
+enum PropertyStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  RENTED
+  ARCHIVED
+}
+
+enum VisitStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  COMPLETED
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  SHORTLISTED
+  REJECTED
+  WITHDRAWN
+  SELECTED
+}
+
+enum AmenityCategory {
+  ESSENTIAL
+  LUXURY
+  SAFETY
+  UTILITY
+}
+
+model User {
+  id           String      @id @default(uuid()) @db.Uuid
+  email        String      @unique
+  phone        String?     @unique
+  passwordHash String
+  fullName     String
+  avatarUrl    String?
+  status       UserStatus  @default(ACTIVE)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  roles             UserRole[]
+  tenantProfile     TenantProfile?
+  landlordProfile   LandlordProfile?
+  properties        Property[]          @relation("LandlordProperties")
+  favourites        Favourite[]         @relation("TenantFavourites")
+  visitRequestsMade VisitRequest[]      @relation("TenantVisits")
+  applicationsMade  RentalApplication[] @relation("TenantApplications")
+
+  @@map("users")
+}
+
+model UserRole {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  role      Role
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([userId])
+  @@map("user_roles")
+}
+
+model TenantProfile {
+  id                     String         @id @default(uuid()) @db.Uuid
+  userId                 String         @unique @db.Uuid
+  occupation             String?
+  moveInDatePreference   DateTime?
+  householdSize          Int?
+  preferredLocations     String[]       @default([])
+  budgetMin              Decimal?       @db.Decimal(12, 2)
+  budgetMax              Decimal?       @db.Decimal(12, 2)
+  preferredPropertyTypes PropertyType[] @default([])
+  bio                    String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_profiles")
+}
+
+model LandlordProfile {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @db.Uuid
+  businessName      String?
+  contactPreference String?
+  bio               String?
+  verified          Boolean  @default(false)
+  responseRate      Int      @default(100)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("landlord_profiles")
+}
+
+model Property {
+  id             String         @id @default(uuid()) @db.Uuid
+  landlordId     String         @db.Uuid
+  title          String
+  description    String         @db.Text
+  propertyType   PropertyType
+  rentAmount     Decimal        @db.Decimal(12, 2)
+  depositAmount  Decimal?       @db.Decimal(12, 2)
+  bedrooms       Int
+  bathrooms      Int
+  areaSqft       Int?
+  floor          Int?
+  totalFloors    Int?
+  addressLine    String
+  area           String
+  city           String         @default("Dhaka")
+  district       String         @default("Dhaka")
+  availableFrom  DateTime
+  status         PropertyStatus @default(DRAFT)
+  viewCount      Int            @default(0)
+  favouriteCount Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  landlord     User                @relation("LandlordProperties", fields: [landlordId], references: [id], onDelete: Restrict)
+  photos       PropertyPhoto[]
+  amenities    PropertyAmenity[]
+  favourites   Favourite[]
+  visits       VisitRequest[]
+  applications RentalApplication[]
+
+  @@index([landlordId])
+  @@index([status])
+  @@index([area])
+  @@index([propertyType])
+  @@index([rentAmount])
+  @@map("properties")
+}
+
+model PropertyPhoto {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @db.Uuid
+  url        String
+  storageKey String?
+  caption    String?
+  isPrimary  Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@map("property_photos")
+}
+
+model Amenity {
+  id       String          @id @default(uuid()) @db.Uuid
+  name     String          @unique
+  slug     String          @unique
+  icon     String?
+  category AmenityCategory @default(ESSENTIAL)
+
+  properties PropertyAmenity[]
+
+  @@map("amenities")
+}
+
+model PropertyAmenity {
+  propertyId String @db.Uuid
+  amenityId  String @db.Uuid
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  amenity  Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([propertyId, amenityId])
+  @@index([propertyId])
+  @@index([amenityId])
+  @@map("property_amenities")
+}
+
+model Favourite {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  propertyId String   @db.Uuid
+  createdAt  DateTime @default(now())
+
+  tenant   User     @relation("TenantFavourites", fields: [tenantId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, propertyId])
+  @@index([tenantId])
+  @@index([propertyId])
+  @@map("favourites")
+}
+
+model VisitRequest {
+  id            String      @id @default(uuid()) @db.Uuid
+  propertyId    String      @db.Uuid
+  tenantId      String      @db.Uuid
+  requestedDate DateTime
+  requestedTime String
+  message       String?     @db.Text
+  status        VisitStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant   User     @relation("TenantVisits", fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("visit_requests")
+}
+
+model RentalApplication {
+  id           String            @id @default(uuid()) @db.Uuid
+  propertyId   String            @db.Uuid
+  tenantId     String            @db.Uuid
+  coverNote    String?           @db.Text
+  moveInDate   DateTime?
+  proposedRent Decimal?          @db.Decimal(12, 2)
+  status       ApplicationStatus @default(SUBMITTED)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant   User     @relation("TenantApplications", fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("rental_applications")
+}

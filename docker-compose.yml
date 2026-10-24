@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: basha_vara_user
       POSTGRES_PASSWORD: local_dev_password_change_me
     ports:
-      - "127.0.0.1:5433:5433"
+      - "127.0.0.1:5433:5432"
     volumes:
       - basha_vara_postgres_data:/var/lib/postgresql/data
     healthcheck:
