@@ -19,7 +19,7 @@ import { PrismaModule } from '../prisma/prisma.module.js';
           configService.get<string>('JWT_ACCESS_SECRET') ||
           'dev_jwt_access_secret_basha_vara_2026_super_secure_key',
         signOptions: {
-          expiresIn: (configService.get<string>('JWT_ACCESS_EXPIRES_IN') || '7d') as any,
+          expiresIn: (configService.get<string>('JWT_ACCESS_EXPIRES_IN') || '15m') as any,
         },
       }),
     }),
