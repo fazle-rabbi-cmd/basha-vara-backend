@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PropertyStatus, PropertyType } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsArray, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsDate, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class PropertyQueryDto {
   @ApiPropertyOptional({ description: 'Text search query matching title, area, or description' })
@@ -51,6 +51,12 @@ export class PropertyQueryDto {
   @IsInt()
   @Min(1)
   bathrooms?: number;
+
+  @ApiPropertyOptional({ description: 'Only properties available on or before this date' })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  availableBy?: Date;
 
   @ApiPropertyOptional({
     description: 'Array of Amenity IDs or slugs required',

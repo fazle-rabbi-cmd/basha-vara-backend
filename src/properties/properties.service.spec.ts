@@ -102,6 +102,26 @@ describe('PropertiesService', () => {
         }),
       );
     });
+
+    it('should require every selected amenity by slug without comparing against UUID columns', async () => {
+      const query: PropertyQueryDto = { amenities: ['wifi-internet', 'parking'] };
+      mockPrismaService.property.count.mockResolvedValue(0);
+      mockPrismaService.property.findMany.mockResolvedValue([]);
+
+      await service.findAll(query);
+
+      expect(mockPrismaService.property.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            status: PropertyStatus.PUBLISHED,
+            AND: [
+              { amenities: { some: { amenity: { slug: 'wifi-internet' } } } },
+              { amenities: { some: { amenity: { slug: 'parking' } } } },
+            ],
+          },
+        }),
+      );
+    });
   });
 
   describe('findById', () => {

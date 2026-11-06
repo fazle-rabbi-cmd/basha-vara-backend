@@ -3,23 +3,29 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Role, UserStatus } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { AuthEmailQueueService } from '../email/auth-email-queue.service.js';
+import { AUTH_ACTION_TOKEN_PURPOSE } from '../email/auth-email.types.js';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private googleClient: OAuth2Client;
 
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private authEmailQueue: AuthEmailQueueService,
   ) {
     this.googleClient = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
@@ -140,6 +146,10 @@ export class AuthService {
       throw new UnauthorizedException('Your account has been suspended. Please contact support.');
     }
 
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('No password is set for this account. Use Google sign-in or request a password setup email.');
+    }
+
     const isMatch = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isMatch) {
       throw new UnauthorizedException('Invalid email or password');
@@ -202,7 +212,7 @@ export class AuthService {
       });
 
       const payload = ticket.getPayload();
-      if (!payload || !payload.email) {
+      if (!payload?.email || !payload.email_verified) {
         throw new UnauthorizedException('Invalid Google token');
       }
 
@@ -217,19 +227,14 @@ export class AuthService {
           landlordProfile: true,
         },
       });
+      let isNewUser = false;
 
       if (!user) {
-        // Create new user from Google data
-        const passwordHash = await bcrypt.hash(
-          Math.random().toString(36).slice(-10),
-          10,
-        );
-
         user = await this.prisma.$transaction(async (tx) => {
           const newUser = await tx.user.create({
             data: {
               email: normalizedEmail,
-              passwordHash,
+              passwordHash: null,
               fullName: payload.name || 'Google User',
               phone: null,
               status: UserStatus.ACTIVE,
@@ -256,6 +261,7 @@ export class AuthService {
             },
           });
         });
+        isNewUser = true;
       }
 
       if (!user) {
@@ -264,6 +270,17 @@ export class AuthService {
 
       if (user.status === UserStatus.SUSPENDED) {
         throw new UnauthorizedException('Your account has been suspended. Please contact support.');
+      }
+
+      if (isNewUser) {
+        try {
+          await this.authEmailQueue.queuePasswordLink(
+            user.id,
+            AUTH_ACTION_TOKEN_PURPOSE.PASSWORD_SETUP,
+          );
+        } catch {
+          this.logger.error('Unable to queue Google account password setup email');
+        }
       }
 
       const roles = user.roles.map((r) => r.role);
@@ -287,5 +304,107 @@ export class AuthService {
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('Google authentication failed');
     }
+  }
+
+  async requestPasswordLink(email: string) {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, passwordHash: true, status: true },
+    });
+    const genericMessage = 'If an account exists for that email, a password link will be sent.';
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      return { message: genericMessage };
+    }
+
+    const purpose = user.passwordHash
+      ? AUTH_ACTION_TOKEN_PURPOSE.PASSWORD_RESET
+      : AUTH_ACTION_TOKEN_PURPOSE.PASSWORD_SETUP;
+    const recentToken = await this.prisma.authActionToken.findFirst({
+      where: {
+        userId: user.id,
+        purpose,
+        usedAt: null,
+        createdAt: { gt: new Date(Date.now() - 60_000) },
+      },
+      select: { id: true },
+    });
+
+    if (!recentToken) {
+      await this.authEmailQueue.queuePasswordLink(user.id, purpose);
+    }
+
+    return { message: genericMessage };
+  }
+
+  async completePasswordSetup(token: string, password: string) {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const authToken = await this.prisma.authActionToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+    const now = new Date();
+
+    if (!authToken || authToken.usedAt || authToken.expiresAt <= now) {
+      throw new BadRequestException('This password link is invalid or has expired.');
+    }
+    if (authToken.user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('This account is not active.');
+    }
+    if (
+      authToken.purpose === AUTH_ACTION_TOKEN_PURPOSE.PASSWORD_SETUP &&
+      authToken.user.passwordHash
+    ) {
+      throw new BadRequestException('A password is already set. Request a reset link instead.');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.authActionToken.updateMany({
+        where: { id: authToken.id, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      });
+      if (consumed.count !== 1) {
+        throw new BadRequestException('This password link is invalid or has expired.');
+      }
+
+      await tx.user.update({
+        where: { id: authToken.userId },
+        data: { passwordHash },
+      });
+      await tx.authActionToken.updateMany({
+        where: { userId: authToken.userId, usedAt: null },
+        data: { usedAt: now },
+      });
+    });
+
+    return { message: 'Password set successfully. You can now sign in.' };
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+    if (!user?.passwordHash) {
+      throw new BadRequestException('Set a password using the email link before changing it.');
+    }
+
+    const currentPasswordMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!currentPasswordMatches) {
+      throw new UnauthorizedException('Current password is incorrect.');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash } });
+      await tx.authActionToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    return { message: 'Password changed successfully.' };
   }
 }

@@ -14,6 +14,9 @@ import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { GoogleAuthDto } from './dto/google-auth.dto.js';
+import { RequestPasswordLinkDto } from './dto/request-password-link.dto.js';
+import { CompletePasswordSetupDto } from './dto/complete-password-setup.dto.js';
+import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 
@@ -84,6 +87,32 @@ export class AuthController {
       accessToken: result.accessToken,
       user: result.user,
     };
+  }
+
+  @Post('password/request-link')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request a password setup or reset email' })
+  async requestPasswordLink(@Body() dto: RequestPasswordLinkDto) {
+    return this.authService.requestPasswordLink(dto.email);
+  }
+
+  @Post('password/complete-setup')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set or reset a password using a single-use email link' })
+  async completePasswordSetup(@Body() dto: CompletePasswordSetupDto) {
+    return this.authService.completePasswordSetup(dto.token, dto.password);
+  }
+
+  @Post('password/change')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Change password for an authenticated account' })
+  async changePassword(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(userId, dto.currentPassword, dto.newPassword);
   }
 
   @Post('logout')

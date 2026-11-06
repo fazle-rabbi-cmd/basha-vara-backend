@@ -42,6 +42,10 @@ export class PropertiesService {
       where.bathrooms = { gte: Number(query.bathrooms) };
     }
 
+    if (query.availableBy) {
+      where.availableFrom = { lte: query.availableBy };
+    }
+
     if (query.minRent !== undefined || query.maxRent !== undefined) {
       where.rentAmount = {};
       if (query.minRent !== undefined) {
@@ -63,16 +67,16 @@ export class PropertiesService {
     }
 
     if (query.amenities && query.amenities.length > 0) {
-      where.amenities = {
-        some: {
-          amenity: {
-            OR: [
-              { id: { in: query.amenities } },
-              { slug: { in: query.amenities } },
-            ],
+      where.AND = query.amenities.map((amenity) => {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(amenity);
+        return {
+        amenities: {
+          some: {
+            amenity: isUuid ? { id: amenity } : { slug: amenity },
           },
         },
-      };
+        };
+      });
     }
 
     const sortField = query.sortBy || 'createdAt';
