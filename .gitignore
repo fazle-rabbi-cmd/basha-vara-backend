@@ -44,6 +44,10 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.local
+.env.production
+# Keep example files for documentation
+!.env.example
+!.env.production.example
 
 # temp directory
 .temp
