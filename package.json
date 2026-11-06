@@ -16,6 +16,7 @@
     "start:prod": "node dist/main",
     "start:worker": "node dist/email-worker.js",
     "start:worker:dev": "nest start --entryFile email-worker --watch",
+    "admin:bootstrap": "node --experimental-strip-types prisma/bootstrap-admin.ts",
     "lint": "oxlint --type-aware src/ test/",
     "test": "vitest run",
     "test:watch": "vitest",

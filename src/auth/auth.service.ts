@@ -33,6 +33,10 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    if (dto.role === Role.ADMIN) {
+      throw new BadRequestException('Admin accounts cannot be created through public registration.');
+    }
+
     const normalizedEmail = dto.email.toLowerCase().trim();
 
     // Check if email already exists
