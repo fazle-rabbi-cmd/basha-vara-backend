@@ -1,5 +1,15 @@
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: basha-vara-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - basha_vara_redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
   postgres:
     image: postgres:17
     container_name: basha-vara-postgres
@@ -20,3 +30,4 @@ services:
 
 volumes:
   basha_vara_postgres_data:
+  basha_vara_redis_data:

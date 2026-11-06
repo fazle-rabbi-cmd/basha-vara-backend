@@ -1,10 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { Role, UserStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { AuthEmailQueueService } from '../email/auth-email-queue.service.js';
+import { AuthActionTokenPurpose } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { vi } from 'vitest';
@@ -19,11 +23,18 @@ describe('AuthService', () => {
       findUnique: vi.fn(),
       create: vi.fn(),
     },
+    authActionToken: {
+      findUnique: vi.fn(),
+    },
     $transaction: vi.fn(),
   };
 
   const mockJwtService = {
     sign: vi.fn(),
+  };
+
+  const mockAuthEmailQueue = {
+    queuePasswordLink: vi.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -37,6 +48,10 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: AuthEmailQueueService,
+          useValue: mockAuthEmailQueue,
         },
       ],
     }).compile();
@@ -177,6 +192,20 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
+    it('should require Google sign-in or password setup for passwordless users', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({
+        id: 'google-user-1',
+        email: 'google@example.com',
+        passwordHash: null,
+        status: UserStatus.ACTIVE,
+      });
+
+      await expect(service.login({
+        email: 'google@example.com',
+        password: 'AnyPassword123',
+      })).rejects.toThrow('No password is set for this account');
+    });
+
     it('should login successfully with valid credentials', async () => {
       const dto: LoginDto = {
         email: 'test@example.com',
@@ -247,6 +276,87 @@ describe('AuthService', () => {
       });
 
       await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('googleLogin', () => {
+    it('should create a passwordless user and queue password setup email', async () => {
+      const email = 'google@example.com';
+      const createdUser = {
+        id: 'google-user-1',
+        email,
+        fullName: 'Google User',
+        phone: null,
+        avatarUrl: null,
+        status: UserStatus.ACTIVE,
+        roles: [{ role: Role.TENANT }],
+        tenantProfile: { id: 'tenant-1' },
+        landlordProfile: null,
+      };
+      const transaction = {
+        user: {
+          create: vi.fn().mockResolvedValue({ id: createdUser.id }),
+          findUnique: vi.fn().mockResolvedValue(createdUser),
+        },
+        tenantProfile: { create: vi.fn() },
+      };
+      const googleClient = (service as unknown as { googleClient: OAuth2Client }).googleClient;
+      vi.spyOn(googleClient, 'verifyIdToken').mockResolvedValue({
+        getPayload: () => ({ email, email_verified: true, name: 'Google User' }),
+      } as never);
+      mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+      mockPrismaService.$transaction.mockImplementation((callback) => callback(transaction));
+      mockJwtService.sign.mockReturnValue('jwt-token');
+
+      const result = await service.googleLogin('google-id-token');
+
+      expect(transaction.user.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ email, passwordHash: null }),
+      }));
+      expect(mockAuthEmailQueue.queuePasswordLink).toHaveBeenCalledWith(
+        createdUser.id,
+        AuthActionTokenPurpose.PASSWORD_SETUP,
+      );
+      expect(result.user.email).toBe(email);
+    });
+  });
+
+  describe('completePasswordSetup', () => {
+    it('should set a password and consume the one-time token', async () => {
+      const token = 'single-use-setup-token';
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+      mockPrismaService.authActionToken.findUnique.mockResolvedValue({
+        id: 'action-token-1',
+        userId: 'google-user-1',
+        tokenHash,
+        purpose: AuthActionTokenPurpose.PASSWORD_SETUP,
+        expiresAt: new Date(Date.now() + 60_000),
+        usedAt: null,
+        user: {
+          id: 'google-user-1',
+          status: UserStatus.ACTIVE,
+          passwordHash: null,
+        },
+      });
+      const transaction = {
+        authActionToken: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+        user: { update: vi.fn() },
+      };
+      mockPrismaService.$transaction.mockImplementation((callback) => callback(transaction));
+
+      const result = await service.completePasswordSetup(token, 'ChosenPassword123!');
+      const savedHash = transaction.user.update.mock.calls[0][0].data.passwordHash;
+
+      expect(result.message).toContain('Password set successfully');
+      expect(await bcrypt.compare('ChosenPassword123!', savedHash)).toBe(true);
+      expect(transaction.authActionToken.updateMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('should reject unknown or expired tokens', async () => {
+      mockPrismaService.authActionToken.findUnique.mockResolvedValue(null);
+
+      await expect(service.completePasswordSetup('invalid-token', 'ChosenPassword123!'))
+        .rejects.toThrow(BadRequestException);
     });
   });
 
