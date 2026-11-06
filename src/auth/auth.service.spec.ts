@@ -66,6 +66,15 @@ describe('AuthService', () => {
   });
 
   describe('register', () => {
+    it('should reject admin role through public registration', async () => {
+      await expect(service.register({
+        email: 'admin@example.com',
+        password: 'Password123!',
+        fullName: 'Unauthorized Admin',
+        role: Role.ADMIN,
+      })).rejects.toThrow('Admin accounts cannot be created through public registration');
+    });
+
     it('should register a new tenant user successfully', async () => {
       const dto: RegisterDto = {
         email: 'test@example.com',
