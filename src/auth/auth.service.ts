@@ -8,16 +8,23 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { Role, UserStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 
 @Injectable()
 export class AuthService {
+  private googleClient: OAuth2Client;
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) {}
+  ) {
+    this.googleClient = new OAuth2Client(
+      process.env.GOOGLE_CLIENT_ID,
+    );
+  }
 
   async register(dto: RegisterDto) {
     const normalizedEmail = dto.email.toLowerCase().trim();
@@ -184,5 +191,101 @@ export class AuthService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
+  }
+
+  async googleLogin(credential: string) {
+    try {
+      // Verify Google token
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        throw new UnauthorizedException('Invalid Google token');
+      }
+
+      const normalizedEmail = payload.email.toLowerCase().trim();
+
+      // Check if user exists
+      let user = await this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        include: {
+          roles: true,
+          tenantProfile: true,
+          landlordProfile: true,
+        },
+      });
+
+      if (!user) {
+        // Create new user from Google data
+        const passwordHash = await bcrypt.hash(
+          Math.random().toString(36).slice(-10),
+          10,
+        );
+
+        user = await this.prisma.$transaction(async (tx) => {
+          const newUser = await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              passwordHash,
+              fullName: payload.name || 'Google User',
+              phone: null,
+              status: UserStatus.ACTIVE,
+              avatarUrl: payload.picture || null,
+              roles: {
+                create: [{ role: Role.TENANT }],
+              },
+            },
+          });
+
+          // Initialize tenant profile
+          await tx.tenantProfile.create({
+            data: {
+              userId: newUser.id,
+            },
+          });
+
+          return tx.user.findUnique({
+            where: { id: newUser.id },
+            include: {
+              roles: true,
+              tenantProfile: true,
+              landlordProfile: true,
+            },
+          });
+        });
+      }
+
+      if (!user) {
+        throw new InternalServerErrorException('Failed to create user account');
+      }
+
+      if (user.status === UserStatus.SUSPENDED) {
+        throw new UnauthorizedException('Your account has been suspended. Please contact support.');
+      }
+
+      const roles = user.roles.map((r) => r.role);
+      const jwtPayload = { sub: user.id, email: user.email, roles };
+      const accessToken = this.jwtService.sign(jwtPayload);
+
+      return {
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          phone: user.phone,
+          avatarUrl: user.avatarUrl,
+          roles,
+          tenantProfile: user.tenantProfile,
+          landlordProfile: user.landlordProfile,
+        },
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Google authentication failed');
+    }
   }
 }

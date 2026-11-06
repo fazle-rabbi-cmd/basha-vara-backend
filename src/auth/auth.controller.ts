@@ -13,6 +13,7 @@ import type { Response } from 'express';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { GoogleAuthDto } from './dto/google-auth.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 
@@ -62,6 +63,24 @@ export class AuthController {
     this.setAuthCookie(res, result.accessToken);
     return {
       message: 'Successfully logged in',
+      accessToken: result.accessToken,
+      user: result.user,
+    };
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Authenticate user with Google OAuth' })
+  @ApiResponse({ status: 200, description: 'Successfully authenticated with Google' })
+  @ApiResponse({ status: 401, description: 'Invalid Google token' })
+  async googleLogin(
+    @Body() dto: GoogleAuthDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.googleLogin(dto.credential);
+    this.setAuthCookie(res, result.accessToken);
+    return {
+      message: 'Successfully logged in with Google',
       accessToken: result.accessToken,
       user: result.user,
     };
