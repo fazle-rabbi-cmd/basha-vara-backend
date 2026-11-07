@@ -15,7 +15,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { AuthEmailQueueService } from '../email/auth-email-queue.service.js';
-import { AUTH_ACTION_TOKEN_PURPOSE } from '../email/auth-email.types.js';
+import { AUTH_ACTION_TOKEN_PURPOSE, AUTH_EMAIL_PURPOSE } from '../email/auth-email.types.js';
 
 @Injectable()
 export class AuthService {
@@ -171,6 +171,7 @@ export class AuthService {
         fullName: user.fullName,
         phone: user.phone,
         avatarUrl: user.avatarUrl,
+        hasPassword: Boolean(user.passwordHash),
         roles,
         tenantProfile: user.tenantProfile,
         landlordProfile: user.landlordProfile,
@@ -198,6 +199,7 @@ export class AuthService {
       fullName: user.fullName,
       phone: user.phone,
       avatarUrl: user.avatarUrl,
+      hasPassword: Boolean(user.passwordHash),
       status: user.status,
       roles: user.roles.map((r) => r.role),
       tenantProfile: user.tenantProfile,
@@ -282,12 +284,12 @@ export class AuthService {
 
       if (isNewUser) {
         try {
-          await this.authEmailQueue.queuePasswordLink(
+          await this.authEmailQueue.queueEmail(
             user.id,
-            AUTH_ACTION_TOKEN_PURPOSE.PASSWORD_SETUP,
+            AUTH_EMAIL_PURPOSE.GOOGLE_ACCOUNT_CREATED,
           );
         } catch {
-          this.logger.error('Unable to queue Google account password setup email');
+          this.logger.error('Unable to queue Google account created email');
         }
       }
 
@@ -391,18 +393,22 @@ export class AuthService {
     return { message: 'Password set successfully. You can now sign in.' };
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(userId: string, currentPassword: string | undefined, newPassword: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, passwordHash: true },
     });
-    if (!user?.passwordHash) {
-      throw new BadRequestException('Set a password using the email link before changing it.');
+    if (!user) {
+      throw new UnauthorizedException('User not found');
     }
 
-    const currentPasswordMatches = await bcrypt.compare(currentPassword, user.passwordHash);
-    if (!currentPasswordMatches) {
-      throw new UnauthorizedException('Current password is incorrect.');
+    if (user?.passwordHash) {
+      const currentPasswordMatches = currentPassword
+        ? await bcrypt.compare(currentPassword, user.passwordHash)
+        : false;
+      if (!currentPasswordMatches) {
+        throw new UnauthorizedException('Current password is incorrect.');
+      }
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);

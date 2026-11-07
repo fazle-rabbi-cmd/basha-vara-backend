@@ -12,6 +12,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { vi } from 'vitest';
+import { AUTH_EMAIL_PURPOSE } from '../email/auth-email.types.js';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -34,6 +35,7 @@ describe('AuthService', () => {
   };
 
   const mockAuthEmailQueue = {
+    queueEmail: vi.fn().mockResolvedValue(undefined),
     queuePasswordLink: vi.fn().mockResolvedValue(undefined),
   };
 
@@ -289,7 +291,7 @@ describe('AuthService', () => {
   });
 
   describe('googleLogin', () => {
-    it('should create a passwordless user and queue password setup email', async () => {
+    it('should create a passwordless user and queue an account-created email', async () => {
       const email = 'google@example.com';
       const createdUser = {
         id: 'google-user-1',
@@ -325,9 +327,9 @@ describe('AuthService', () => {
           passwordHash: null,
         }),
       }));
-      expect(mockAuthEmailQueue.queuePasswordLink).toHaveBeenCalledWith(
+      expect(mockAuthEmailQueue.queueEmail).toHaveBeenCalledWith(
         createdUser.id,
-        AuthActionTokenPurpose.PASSWORD_SETUP,
+        AUTH_EMAIL_PURPOSE.GOOGLE_ACCOUNT_CREATED,
       );
       expect(result.user.email).toBe(email);
     });
@@ -369,6 +371,32 @@ describe('AuthService', () => {
 
       await expect(service.completePasswordSetup('invalid-token', 'ChosenPassword123!'))
         .rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('changePassword', () => {
+    it('should allow a passwordless Google user to set the first password', async () => {
+      mockPrismaService.user.findUnique.mockResolvedValue({ id: 'google-user-1', passwordHash: null });
+      const transaction = {
+        user: { update: vi.fn() },
+        authActionToken: { updateMany: vi.fn() },
+      };
+      mockPrismaService.$transaction.mockImplementation((callback) => callback(transaction));
+
+      const result = await service.changePassword('google-user-1', undefined, 'ChosenPassword123!');
+      const savedHash = transaction.user.update.mock.calls[0][0].data.passwordHash;
+
+      expect(result.message).toContain('Password changed successfully');
+      expect(await bcrypt.compare('ChosenPassword123!', savedHash)).toBe(true);
+    });
+
+    it('should require the current password after one has been set', async () => {
+      const savedHash = await bcrypt.hash('CurrentPassword123!', 10);
+      mockPrismaService.user.findUnique.mockResolvedValue({ id: 'user-1', passwordHash: savedHash });
+
+      await expect(service.changePassword('user-1', undefined, 'NewPassword123!'))
+        .rejects.toThrow('Current password is incorrect');
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
     });
   });
 
