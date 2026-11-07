@@ -1,20 +1,31 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
+export function buildPrismaDatabaseUrl(databaseUrl: string | undefined) {
+  if (!databaseUrl) {
+    return databaseUrl;
+  }
+
+  const url = new URL(databaseUrl);
+  const usesPgBouncer = url.port === '6543' || url.hostname.includes('.pooler.');
+
+  if (usesPgBouncer) {
+    url.searchParams.set('pgbouncer', 'true');
+    url.searchParams.set('connection_limit', '1');
+  } else {
+    url.searchParams.set('connection_limit', url.searchParams.get('connection_limit') ?? '5');
+    url.searchParams.set('pool_timeout', url.searchParams.get('pool_timeout') ?? '10');
+  }
+
+  return url.toString();
+}
+
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    const databaseUrl = process.env.DATABASE_URL;
-
-    // Add connection pool parameters for Supabase/Render if not present
-    // This prevents "prepared statement already exists" errors
-    let connectionString = databaseUrl;
-    if (databaseUrl && !databaseUrl.includes('connection_limit')) {
-      const separator = databaseUrl.includes('?') ? '&' : '?';
-      connectionString = `${databaseUrl}${separator}connection_limit=5&pool_timeout=10`;
-    }
+    const connectionString = buildPrismaDatabaseUrl(process.env.DATABASE_URL);
 
     super({
       log: ['error', 'warn'],
