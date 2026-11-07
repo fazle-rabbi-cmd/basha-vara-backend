@@ -6,11 +6,21 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
+    const databaseUrl = process.env.DATABASE_URL;
+
+    // Add connection pool parameters for Supabase/Render if not present
+    // This prevents "prepared statement already exists" errors
+    let connectionString = databaseUrl;
+    if (databaseUrl && !databaseUrl.includes('connection_limit')) {
+      const separator = databaseUrl.includes('?') ? '&' : '?';
+      connectionString = `${databaseUrl}${separator}connection_limit=5&pool_timeout=10`;
+    }
+
     super({
       log: ['error', 'warn'],
       datasources: {
         db: {
-          url: process.env.DATABASE_URL,
+          url: connectionString,
         },
       },
     });
