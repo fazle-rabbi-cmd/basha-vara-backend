@@ -289,7 +289,7 @@ describe('AuthService', () => {
   });
 
   describe('googleLogin', () => {
-    it('should create a passwordless user and queue password setup email', async () => {
+    it('should create a Google-only user with an unusable password hash', async () => {
       const email = 'google@example.com';
       const createdUser = {
         id: 'google-user-1',
@@ -320,12 +320,12 @@ describe('AuthService', () => {
       const result = await service.googleLogin('google-id-token');
 
       expect(transaction.user.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ email, passwordHash: null }),
+        data: expect.objectContaining({
+          email,
+          passwordHash: expect.stringMatching(/^\$2[aby]\$12\$/),
+        }),
       }));
-      expect(mockAuthEmailQueue.queuePasswordLink).toHaveBeenCalledWith(
-        createdUser.id,
-        AuthActionTokenPurpose.PASSWORD_SETUP,
-      );
+      expect(mockAuthEmailQueue.queuePasswordLink).not.toHaveBeenCalled();
       expect(result.user.email).toBe(email);
     });
   });
