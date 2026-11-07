@@ -10,7 +10,7 @@ import {
 export class AuthEmailQueueService implements OnModuleDestroy {
   constructor(@Inject(AUTH_EMAIL_QUEUE) private readonly queue: Queue<AuthEmailJob>) {}
 
-  async queuePasswordLink(userId: string, purpose: AuthEmailPurpose) {
+  async queueEmail(userId: string, purpose: AuthEmailPurpose) {
     await this.queue.add(purpose, { userId, purpose }, {
       jobId: `${purpose.toLowerCase()}-${userId}-${Math.floor(Date.now() / 60_000)}`,
       attempts: 5,
@@ -18,6 +18,10 @@ export class AuthEmailQueueService implements OnModuleDestroy {
       removeOnComplete: true,
       removeOnFail: { age: 86_400 },
     });
+  }
+
+  async queuePasswordLink(userId: string, purpose: AuthEmailPurpose) {
+    return this.queueEmail(userId, purpose);
   }
 
   async onModuleDestroy() {

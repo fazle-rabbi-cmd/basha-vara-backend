@@ -4,7 +4,13 @@ export const AUTH_ACTION_TOKEN_PURPOSE = {
   PASSWORD_RESET: 'PASSWORD_RESET',
 } as const;
 
-export type AuthEmailPurpose = (typeof AUTH_ACTION_TOKEN_PURPOSE)[keyof typeof AUTH_ACTION_TOKEN_PURPOSE];
+export const AUTH_EMAIL_PURPOSE = {
+  GOOGLE_ACCOUNT_CREATED: 'GOOGLE_ACCOUNT_CREATED',
+} as const;
+
+export type AuthEmailPurpose =
+  | (typeof AUTH_ACTION_TOKEN_PURPOSE)[keyof typeof AUTH_ACTION_TOKEN_PURPOSE]
+  | (typeof AUTH_EMAIL_PURPOSE)[keyof typeof AUTH_EMAIL_PURPOSE];
 
 export interface AuthEmailJob {
   userId: string;
