@@ -209,6 +209,9 @@ export class AuthService {
 
   async googleLogin(credential: string) {
     try {
+      this.logger.log(`Attempting Google login with credential length: ${credential?.length}`);
+      this.logger.log(`GOOGLE_CLIENT_ID configured: ${!!process.env.GOOGLE_CLIENT_ID}`);
+
       // Verify Google token
       const ticket = await this.googleClient.verifyIdToken({
         idToken: credential,
@@ -217,6 +220,7 @@ export class AuthService {
 
       const payload = ticket.getPayload();
       if (!payload?.email || !payload.email_verified) {
+        this.logger.error('Google token missing email or not verified');
         throw new UnauthorizedException('Invalid Google token');
       }
 
@@ -305,6 +309,7 @@ export class AuthService {
         },
       };
     } catch (error) {
+      this.logger.error(`Google login failed: ${error instanceof Error ? error.message : String(error)}`);
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('Google authentication failed');
     }
