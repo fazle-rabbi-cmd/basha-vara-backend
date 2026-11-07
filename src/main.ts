@@ -3,11 +3,18 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
+import { AuthEmailWorkerModule } from './email/auth-email-worker.module.js';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter.js';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
+
+  if (process.env.EMAIL_WORKER_ENABLED === 'true') {
+    const workerApp = await NestFactory.createApplicationContext(AuthEmailWorkerModule);
+    workerApp.enableShutdownHooks();
+    logger.log('Email worker running inside the web service');
+  }
 
   // Cookie parser middleware for HttpOnly auth cookies
   app.use(cookieParser());

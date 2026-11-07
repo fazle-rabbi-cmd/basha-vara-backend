@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Role, UserStatus } from '@prisma/client';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -235,14 +235,14 @@ export class AuthService {
           landlordProfile: true,
         },
       });
+      let isNewUser = false;
 
       if (!user) {
-        const unusablePasswordHash = await bcrypt.hash(randomBytes(32).toString('hex'), 12);
         user = await this.prisma.$transaction(async (tx) => {
           const newUser = await tx.user.create({
             data: {
               email: normalizedEmail,
-              passwordHash: unusablePasswordHash,
+              passwordHash: null,
               fullName: payload.name || 'Google User',
               phone: null,
               status: UserStatus.ACTIVE,
@@ -269,6 +269,7 @@ export class AuthService {
             },
           });
         });
+        isNewUser = true;
       }
 
       if (!user) {
@@ -277,6 +278,17 @@ export class AuthService {
 
       if (user.status === UserStatus.SUSPENDED) {
         throw new UnauthorizedException('Your account has been suspended. Please contact support.');
+      }
+
+      if (isNewUser) {
+        try {
+          await this.authEmailQueue.queuePasswordLink(
+            user.id,
+            AUTH_ACTION_TOKEN_PURPOSE.PASSWORD_SETUP,
+          );
+        } catch {
+          this.logger.error('Unable to queue Google account password setup email');
+        }
       }
 
       const roles = user.roles.map((r) => r.role);
