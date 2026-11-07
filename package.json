@@ -13,7 +13,7 @@
     "start": "npm run start:prod",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "npx prisma migrate deploy && node dist/main",
     "start:worker": "node dist/email-worker.js",
     "start:worker:dev": "nest start --entryFile email-worker --watch",
     "admin:bootstrap": "node --experimental-strip-types prisma/bootstrap-admin.ts",
