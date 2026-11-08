@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -87,6 +88,30 @@ export class AuthController {
       accessToken: result.accessToken,
       user: result.user,
     };
+  }
+
+  @Get('google/native/start')
+  @ApiOperation({ summary: 'Start Google OAuth for the native app' })
+  async nativeGoogleStart(@Res() res: Response) {
+    res.redirect(this.authService.getNativeGoogleAuthUrl());
+  }
+
+  @Get('google/native/callback')
+  @ApiOperation({ summary: 'Complete Google OAuth for the native app' })
+  async nativeGoogleCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    if (!code || !state) {
+      res.status(HttpStatus.BAD_REQUEST).send('Google authentication was cancelled or incomplete.');
+      return;
+    }
+
+    const result = await this.authService.completeNativeGoogleLogin(code, state);
+    const appUrl = new URL(process.env.NATIVE_APP_REDIRECT_URI ?? 'bashavara://auth/callback');
+    appUrl.searchParams.set('token', result.accessToken);
+    res.redirect(appUrl.toString());
   }
 
   @Post('password/request-link')
