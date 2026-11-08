@@ -1,0 +1,6 @@
+# Enforce Unix line endings for shell scripts and CI files
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.github/** text eol=lf
+src/**/*.ts text eol=lf
