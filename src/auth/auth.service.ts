@@ -305,6 +305,7 @@ export class AuthService {
           fullName: user.fullName,
           phone: user.phone,
           avatarUrl: user.avatarUrl,
+          hasPassword: Boolean(user.passwordHash),
           roles,
           tenantProfile: user.tenantProfile,
           landlordProfile: user.landlordProfile,
