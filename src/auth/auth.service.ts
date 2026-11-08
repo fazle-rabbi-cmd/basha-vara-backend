@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Role, UserStatus } from '@prisma/client';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -29,6 +29,7 @@ export class AuthService {
   ) {
     this.googleClient = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
     );
   }
 
@@ -315,6 +316,48 @@ export class AuthService {
       this.logger.error(`Google login failed: ${error instanceof Error ? error.message : String(error)}`);
       if (error instanceof UnauthorizedException) throw error;
       throw new UnauthorizedException('Google authentication failed');
+    }
+  }
+
+  getNativeGoogleAuthUrl() {
+    const redirectUri = process.env.GOOGLE_NATIVE_REDIRECT_URI;
+    if (!redirectUri) {
+      throw new InternalServerErrorException('Google native redirect URI is not configured.');
+    }
+
+    const state = this.jwtService.sign(
+      { purpose: 'google-native', redirectUri, nonce: randomBytes(16).toString('hex') },
+      { expiresIn: '10m' },
+    );
+    return this.googleClient.generateAuthUrl({
+      access_type: 'online',
+      scope: ['openid', 'email', 'profile'],
+      state,
+      redirect_uri: redirectUri,
+      prompt: 'select_account',
+    });
+  }
+
+  async completeNativeGoogleLogin(code: string, state: string) {
+    try {
+      const statePayload = this.jwtService.verify<{ purpose: string; redirectUri: string }>(state);
+      if (statePayload.purpose !== 'google-native') {
+        throw new UnauthorizedException('Invalid Google OAuth state.');
+      }
+
+      const { tokens } = await this.googleClient.getToken({
+        code,
+        redirect_uri: statePayload.redirectUri,
+      });
+      if (!tokens.id_token) {
+        throw new UnauthorizedException('Google did not return an ID token.');
+      }
+
+      return this.googleLogin(tokens.id_token);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      this.logger.error(`Native Google login failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new UnauthorizedException('Google authentication failed.');
     }
   }
 
