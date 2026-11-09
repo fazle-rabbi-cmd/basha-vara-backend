@@ -9,6 +9,7 @@ import { FavouritesModule } from './favourites/favourites.module.js';
 import { VisitsModule } from './visits/visits.module.js';
 import { ApplicationsModule } from './applications/applications.module.js';
 import { AdminModule } from './admin/admin.module.js';
+import { UploadsModule } from './uploads/uploads.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 
@@ -27,6 +28,7 @@ import { AppService } from './app.service.js';
     VisitsModule,
     ApplicationsModule,
     AdminModule,
+    UploadsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

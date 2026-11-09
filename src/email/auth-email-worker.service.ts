@@ -29,7 +29,7 @@ export class AuthEmailWorkerService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     const emailFrom = this.config.get<string>('EMAIL_FROM');
-    this.brevoApiKey = this.config.get<string>('BREVO_API_KEY');
+    this.brevoApiKey = this.config.get<string>('BREVO_API_KEY')?.trim() || undefined;
     const host = this.config.get<string>('SMTP_HOST');
     const user = this.config.get<string>('SMTP_USER');
     const pass = this.config.get<string>('SMTP_PASS');

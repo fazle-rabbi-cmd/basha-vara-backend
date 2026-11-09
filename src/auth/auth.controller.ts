@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import type { Response } from 'express';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -81,7 +82,7 @@ export class AuthController {
     @Body() dto: GoogleAuthDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.googleLogin(dto.credential);
+    const result = await this.authService.googleLogin(dto.credential, dto.role);
     this.setAuthCookie(res, result.accessToken);
     return {
       message: 'Successfully logged in with Google',
@@ -92,8 +93,9 @@ export class AuthController {
 
   @Get('google/native/start')
   @ApiOperation({ summary: 'Start Google OAuth for the native app' })
-  async nativeGoogleStart(@Res() res: Response) {
-    res.redirect(this.authService.getNativeGoogleAuthUrl());
+  async nativeGoogleStart(@Query('role') role: Role | undefined, @Res() res: Response) {
+    const requestedRole = role === Role.LANDLORD ? Role.LANDLORD : Role.TENANT;
+    res.redirect(this.authService.getNativeGoogleAuthUrl(requestedRole));
   }
 
   @Get('google/native/callback')
