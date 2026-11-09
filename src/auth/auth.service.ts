@@ -210,7 +210,7 @@ export class AuthService {
     };
   }
 
-  async googleLogin(credential: string) {
+  async googleLogin(credential: string, requestedRole?: Role) {
     try {
       this.logger.log(`Attempting Google login with credential length: ${credential?.length}`);
       this.logger.log(`GOOGLE_CLIENT_ID configured: ${!!process.env.GOOGLE_CLIENT_ID}`);
@@ -241,6 +241,7 @@ export class AuthService {
       let isNewUser = false;
 
       if (!user) {
+        const assignedRole = requestedRole ?? Role.TENANT;
         user = await this.prisma.$transaction(async (tx) => {
           const newUser = await tx.user.create({
             data: {
@@ -251,17 +252,20 @@ export class AuthService {
               status: UserStatus.ACTIVE,
               avatarUrl: payload.picture || null,
               roles: {
-                create: [{ role: Role.TENANT }],
+                create: [{ role: assignedRole }],
               },
             },
           });
 
-          // Initialize tenant profile
-          await tx.tenantProfile.create({
-            data: {
-              userId: newUser.id,
-            },
-          });
+          if (assignedRole === Role.LANDLORD) {
+            await tx.landlordProfile.create({
+              data: { userId: newUser.id, businessName: newUser.fullName },
+            });
+          } else {
+            await tx.tenantProfile.create({
+              data: { userId: newUser.id },
+            });
+          }
 
           return tx.user.findUnique({
             where: { id: newUser.id },
@@ -319,14 +323,14 @@ export class AuthService {
     }
   }
 
-  getNativeGoogleAuthUrl() {
+  getNativeGoogleAuthUrl(requestedRole: Role = Role.TENANT) {
     const redirectUri = process.env.GOOGLE_NATIVE_REDIRECT_URI;
     if (!redirectUri) {
       throw new InternalServerErrorException('Google native redirect URI is not configured.');
     }
 
     const state = this.jwtService.sign(
-      { purpose: 'google-native', redirectUri, nonce: randomBytes(16).toString('hex') },
+      { purpose: 'google-native', redirectUri, nonce: randomBytes(16).toString('hex'), role: requestedRole },
       { expiresIn: '10m' },
     );
     return this.googleClient.generateAuthUrl({
@@ -340,7 +344,7 @@ export class AuthService {
 
   async completeNativeGoogleLogin(code: string, state: string) {
     try {
-      const statePayload = this.jwtService.verify<{ purpose: string; redirectUri: string }>(state);
+      const statePayload = this.jwtService.verify<{ purpose: string; redirectUri: string; role?: Role }>(state);
       if (statePayload.purpose !== 'google-native') {
         throw new UnauthorizedException('Invalid Google OAuth state.');
       }
@@ -353,7 +357,7 @@ export class AuthService {
         throw new UnauthorizedException('Google did not return an ID token.');
       }
 
-      return this.googleLogin(tokens.id_token);
+      return this.googleLogin(tokens.id_token, statePayload.role);
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
       this.logger.error(`Native Google login failed: ${error instanceof Error ? error.message : String(error)}`);
