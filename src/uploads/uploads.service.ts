@@ -136,6 +136,17 @@ export class UploadsService {
     });
   }
 
+  async completeProfilePhoto(userId: string, storageKey: string): Promise<string> {
+    const publicUrl = this.supabase.storage.from('basha-vara-uploads').getPublicUrl(storageKey).data.publicUrl;
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: publicUrl },
+    });
+
+    return publicUrl;
+  }
+
   async deletePropertyPhoto(userId: string, userRole: string, propertyId: string, photoId: string): Promise<void> {
     const photo = await this.prisma.propertyPhoto.findUnique({
       where: { id: photoId },

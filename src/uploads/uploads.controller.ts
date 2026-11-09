@@ -30,6 +30,14 @@ export class UploadsController {
     return this.uploadsService.completePropertyPhoto(req.user.userId, dto);
   }
 
+  @Post('complete-profile')
+  @ApiOperation({ summary: 'Complete profile photo upload' })
+  @ApiResponse({ status: 200, description: 'Profile photo uploaded successfully' })
+  async completeProfileUpload(@Request() req: any, @Body() dto: { storageKey: string }): Promise<{ publicUrl: string }> {
+    const publicUrl = await this.uploadsService.completeProfilePhoto(req.user.userId, dto.storageKey);
+    return { publicUrl };
+  }
+
   @Delete('properties/:propertyId/photos/:photoId')
   @ApiOperation({ summary: 'Delete property photo' })
   @ApiResponse({ status: 200, description: 'Photo deleted successfully' })

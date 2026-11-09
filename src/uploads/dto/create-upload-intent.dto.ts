@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsString, MaxLength, IsOptional } from 'class-validator';
 
 export enum UploadType {
   PROPERTY_PHOTO = 'property_photo',
@@ -12,6 +12,7 @@ export class CreateUploadIntentDto {
   type: UploadType;
 
   @ApiProperty({ description: 'Property ID (required for property photos)', required: false })
+  @IsOptional()
   @IsString()
   @MaxLength(36)
   propertyId?: string;
