@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PropertyStatus, Role } from '@prisma/client';
 import { PropertiesService } from './properties.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -184,6 +184,8 @@ describe('PropertiesService', () => {
         bathrooms: 1,
         addressLine: '123 Street',
         area: 'Dhanmondi',
+        lat: 23.8103,
+        lng: 90.4125,
       };
 
       mockPrismaService.$transaction.mockImplementation(async (callback) => {
@@ -199,7 +201,26 @@ describe('PropertiesService', () => {
       const result = await service.create('landlord-1', dto);
 
       expect(result).toHaveProperty('id', 'prop-1');
-      expect(mockPrismaService.property.create).toHaveBeenCalled();
+      expect(mockPrismaService.property.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ lat: 23.8103, lng: 90.4125 }),
+      }));
+    });
+
+    it('should reject incomplete or out-of-range map coordinates', async () => {
+      const dto: CreatePropertyDto = {
+        title: 'New Property',
+        description: 'Description',
+        propertyType: 'APARTMENT',
+        rentAmount: 15000,
+        bedrooms: 2,
+        bathrooms: 1,
+        addressLine: '123 Street',
+        area: 'Dhanmondi',
+        lat: 23.8103,
+      };
+
+      await expect(service.create('landlord-1', dto)).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
     });
   });
 

@@ -169,6 +169,8 @@ model Property {
   area           String
   city           String         @default("Dhaka")
   district       String         @default("Dhaka")
+  lat            Float?
+  lng            Float?
   availableFrom  DateTime
   status         PropertyStatus @default(DRAFT)
   viewCount      Int            @default(0)

@@ -291,6 +291,50 @@ describe('AuthService', () => {
   });
 
   describe('googleLogin', () => {
+    it('should create a landlord profile when landlord is selected during Google signup', async () => {
+      const email = 'landlord@example.com';
+      const landlordProfile = { id: 'landlord-profile-1' };
+      const createdUser = {
+        id: 'google-landlord-1',
+        email,
+        fullName: 'Google Landlord',
+        phone: null,
+        avatarUrl: null,
+        status: UserStatus.ACTIVE,
+        roles: [{ role: Role.LANDLORD }],
+        tenantProfile: null,
+        landlordProfile,
+      };
+      const transaction = {
+        user: {
+          create: vi.fn().mockResolvedValue({ id: createdUser.id, fullName: createdUser.fullName }),
+          findUnique: vi.fn().mockResolvedValue(createdUser),
+        },
+        tenantProfile: { create: vi.fn() },
+        landlordProfile: { create: vi.fn().mockResolvedValue(landlordProfile) },
+      };
+      const googleClient = (service as unknown as { googleClient: OAuth2Client }).googleClient;
+      vi.spyOn(googleClient, 'verifyIdToken').mockResolvedValue({
+        getPayload: () => ({ email, email_verified: true, name: createdUser.fullName }),
+      } as never);
+      mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+      mockPrismaService.$transaction.mockImplementation((callback) => callback(transaction));
+      mockJwtService.sign.mockReturnValue('jwt-token');
+
+      const result = await service.googleLogin('google-id-token', Role.LANDLORD);
+
+      expect(transaction.user.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          roles: { create: [{ role: Role.LANDLORD }] },
+        }),
+      }));
+      expect(transaction.landlordProfile.create).toHaveBeenCalledWith({
+        data: { userId: createdUser.id, businessName: createdUser.fullName },
+      });
+      expect(transaction.tenantProfile.create).not.toHaveBeenCalled();
+      expect(result.user.roles).toContain(Role.LANDLORD);
+    });
+
     it('should create a passwordless user and queue an account-created email', async () => {
       const email = 'google@example.com';
       const createdUser = {

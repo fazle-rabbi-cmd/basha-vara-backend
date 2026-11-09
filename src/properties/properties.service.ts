@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -12,6 +13,17 @@ import { PropertyQueryDto } from './dto/property-query.dto.js';
 @Injectable()
 export class PropertiesService {
   constructor(private prisma: PrismaService) {}
+
+  private validateCoordinatePair(lat?: number, lng?: number) {
+    if (lat === undefined && lng === undefined) return;
+    if (
+      lat === undefined || lng === undefined ||
+      !Number.isFinite(lat) || !Number.isFinite(lng) ||
+      lat < -90 || lat > 90 || lng < -180 || lng > 180
+    ) {
+      throw new BadRequestException('Provide a valid latitude and longitude together.');
+    }
+  }
 
   async findAll(query: PropertyQueryDto) {
     const page = Number(query.page) || 1;
@@ -185,6 +197,7 @@ export class PropertiesService {
   }
 
   async create(landlordId: string, dto: CreatePropertyDto) {
+    this.validateCoordinatePair(dto.lat, dto.lng);
     return this.prisma.$transaction(async (tx) => {
       const property = await tx.property.create({
         data: {
@@ -203,6 +216,8 @@ export class PropertiesService {
           area: dto.area.trim(),
           city: dto.city?.trim() || 'Dhaka',
           district: dto.district?.trim() || 'Dhaka',
+          lat: dto.lat,
+          lng: dto.lng,
           availableFrom: dto.availableFrom,
           status: dto.status ?? PropertyStatus.DRAFT,
           photos: dto.photos && dto.photos.length > 0
@@ -239,6 +254,7 @@ export class PropertiesService {
   }
 
   async update(id: string, userId: string, roles: string[], dto: UpdatePropertyDto) {
+    this.validateCoordinatePair(dto.lat, dto.lng);
     const property = await this.prisma.property.findUnique({
       where: { id },
       include: { photos: true, amenities: true },
@@ -308,6 +324,8 @@ export class PropertiesService {
           ...(dto.area !== undefined && { area: dto.area.trim() }),
           ...(dto.city !== undefined && { city: dto.city.trim() }),
           ...(dto.district !== undefined && { district: dto.district.trim() }),
+          ...(dto.lat !== undefined && { lat: dto.lat }),
+          ...(dto.lng !== undefined && { lng: dto.lng }),
           ...(dto.availableFrom !== undefined && { availableFrom: dto.availableFrom }),
           ...(dto.status !== undefined && { status: dto.status }),
         },
