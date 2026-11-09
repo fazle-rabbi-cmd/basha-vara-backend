@@ -20,21 +20,21 @@ export class UploadsController {
   @ApiOperation({ summary: 'Create upload intent' })
   @ApiResponse({ status: 200, type: UploadIntentResponseDto })
   async createUploadIntent(@Request() req: any, @Body() dto: CreateUploadIntentDto): Promise<UploadIntentResponseDto> {
-    return this.uploadsService.createUploadIntent(req.user.userId, req.user.role, dto);
+    return this.uploadsService.createUploadIntent(req.user.id, req.user.roles[0], dto);
   }
 
   @Post('complete')
   @ApiOperation({ summary: 'Complete property photo upload' })
   @ApiResponse({ status: 200, description: 'Upload completed successfully' })
   async completeUpload(@Request() req: any, @Body() dto: CompleteUploadDto): Promise<void> {
-    return this.uploadsService.completePropertyPhoto(req.user.userId, dto);
+    return this.uploadsService.completePropertyPhoto(req.user.id, dto);
   }
 
   @Post('complete-profile')
   @ApiOperation({ summary: 'Complete profile photo upload' })
   @ApiResponse({ status: 200, description: 'Profile photo uploaded successfully' })
   async completeProfileUpload(@Request() req: any, @Body() dto: { storageKey: string }): Promise<{ publicUrl: string }> {
-    const publicUrl = await this.uploadsService.completeProfilePhoto(req.user.userId, dto.storageKey);
+    const publicUrl = await this.uploadsService.completeProfilePhoto(req.user.id, dto.storageKey);
     return { publicUrl };
   }
 
@@ -47,6 +47,6 @@ export class UploadsController {
     @Param('propertyId') propertyId: string,
     @Param('photoId') photoId: string,
   ): Promise<void> {
-    return this.uploadsService.deletePropertyPhoto(req.user.userId, req.user.role, propertyId, photoId);
+    return this.uploadsService.deletePropertyPhoto(req.user.id, req.user.roles[0], propertyId, photoId);
   }
 }

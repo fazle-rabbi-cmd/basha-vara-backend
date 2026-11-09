@@ -31,7 +31,7 @@ export class UploadsService {
 
   async createUploadIntent(
     userId: string,
-    userRole: string,
+    userRoles: string[],
     dto: CreateUploadIntentDto,
   ): Promise<UploadIntentResponseDto> {
     if (!this.supabase) {
@@ -64,7 +64,7 @@ export class UploadsService {
         throw new NotFoundException('Property not found');
       }
 
-      if (property.landlordId !== userId && userRole !== 'ADMIN') {
+      if (property.landlordId !== userId && !userRoles.includes('ADMIN')) {
         throw new ForbiddenException('You do not own this property');
       }
 
@@ -137,17 +137,22 @@ export class UploadsService {
   }
 
   async completeProfilePhoto(userId: string, storageKey: string): Promise<string> {
-    const publicUrl = this.supabase.storage.from('basha-vara-uploads').getPublicUrl(storageKey).data.publicUrl;
+    try {
+      const publicUrl = this.supabase.storage.from('basha-vara-uploads').getPublicUrl(storageKey).data.publicUrl;
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { avatarUrl: publicUrl },
-    });
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl: publicUrl },
+      });
 
-    return publicUrl;
+      return publicUrl;
+    } catch (error: any) {
+      console.error('Profile photo update error:', error);
+      throw new BadRequestException(`Failed to update profile photo: ${error.message}`);
+    }
   }
 
-  async deletePropertyPhoto(userId: string, userRole: string, propertyId: string, photoId: string): Promise<void> {
+  async deletePropertyPhoto(userId: string, userRoles: string[], propertyId: string, photoId: string): Promise<void> {
     const photo = await this.prisma.propertyPhoto.findUnique({
       where: { id: photoId },
       include: { property: true },
@@ -157,7 +162,7 @@ export class UploadsService {
       throw new NotFoundException('Photo not found');
     }
 
-    if (photo.property.landlordId !== userId && userRole !== 'ADMIN') {
+    if (photo.property.landlordId !== userId && !userRoles.includes('ADMIN')) {
       throw new ForbiddenException('You do not own this property');
     }
 
