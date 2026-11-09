@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsDate,
+  IsDefined,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -12,7 +13,9 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Max,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -116,6 +119,24 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsString()
   district?: string = 'Dhaka';
+
+  @ApiPropertyOptional({ example: 23.8103, description: 'Latitude for map location' })
+  @ValidateIf((dto) => dto.lat !== undefined || dto.lng !== undefined)
+  @IsDefined({ message: 'Latitude and longitude must be provided together.' })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  lat?: number;
+
+  @ApiPropertyOptional({ example: 90.4125, description: 'Longitude for map location' })
+  @ValidateIf((dto) => dto.lat !== undefined || dto.lng !== undefined)
+  @IsDefined({ message: 'Latitude and longitude must be provided together.' })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  lng?: number;
 
   @ApiProperty({ example: '2026-11-01T00:00:00.000Z' })
   @Type(() => Date)
