@@ -52,6 +52,9 @@ export class VisitsService {
         requestedDate: dto.requestedDate,
         requestedTime: dto.requestedTime.trim(),
         message: dto.message?.trim() || null,
+        visitType: dto.visitType || 'IN_PERSON',
+        guestCount: dto.guestCount || 1,
+        contactPhone: dto.contactPhone || null,
         status: VisitStatus.PENDING,
       },
       include: {

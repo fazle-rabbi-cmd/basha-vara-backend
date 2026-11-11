@@ -227,7 +227,7 @@ export class AdminService {
     });
   }
 
-  async updateUserRole(id: string, roleName: string) {
+  async updateUserRole(id: string, roleName: string, currentUserRoles?: string[]) {
     const normalizedRoleName = roleName.toUpperCase();
 
     const user = await this.prisma.user.findUnique({
@@ -255,6 +255,12 @@ export class AdminService {
 
     if (!role) {
       throw new NotFoundException(`Role ${normalizedRoleName} not found`);
+    }
+
+    if (currentUserRoles && !currentUserRoles.includes('SUPER_ADMIN')) {
+      if (normalizedRoleName === 'ADMIN' || normalizedRoleName === 'SUPER_ADMIN') {
+        throw new BadRequestException('Admins can only add tenant and landlord roles');
+      }
     }
 
     const hasRole = user.roles.some((r) => r.role.name === normalizedRoleName);
@@ -439,7 +445,7 @@ export class AdminService {
     return { message: `Role ${role.name} deleted successfully` };
   }
 
-  async removeUserRole(userId: string, roleName: string) {
+  async removeUserRole(userId: string, roleName: string, currentUserRoles?: string[]) {
     const normalizedRoleName = roleName.toUpperCase();
 
     const user = await this.prisma.user.findUnique({
@@ -462,11 +468,6 @@ export class AdminService {
       throw new BadRequestException('Cannot modify super admin account');
     }
 
-    const isAdmin = user.roles.some((r) => r.role.name === 'ADMIN');
-    if (isAdmin) {
-      throw new BadRequestException('Cannot modify admin account. Only super admin can perform this action.');
-    }
-
     const role = await this.prisma.role.findUnique({
       where: { name: normalizedRoleName },
     });
@@ -475,8 +476,10 @@ export class AdminService {
       throw new BadRequestException(`Role ${normalizedRoleName} not found`);
     }
 
-    if (normalizedRoleName === 'ADMIN' || normalizedRoleName === 'SUPER_ADMIN') {
-      throw new BadRequestException('Cannot remove admin or super admin roles. Only super admin can perform this action.');
+    if (currentUserRoles && !currentUserRoles.includes('SUPER_ADMIN')) {
+      if (normalizedRoleName === 'ADMIN' || normalizedRoleName === 'SUPER_ADMIN') {
+        throw new BadRequestException('Admins can only remove tenant and landlord roles');
+      }
     }
 
     const userRole = await this.prisma.userRole.findUnique({
@@ -533,7 +536,7 @@ export class AdminService {
     return password;
   }
 
-  async createUser(email: string, fullName: string, phone?: string, role: string = 'ADMIN') {
+  async createUser(email: string, fullName: string, phone?: string, role: string = 'ADMIN', currentUserRoles?: string[]) {
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedRole = role.toUpperCase();
 
@@ -554,8 +557,10 @@ export class AdminService {
       throw new BadRequestException(`Role ${normalizedRole} not found`);
     }
 
-    if (normalizedRole === 'SUPER_ADMIN') {
-      throw new BadRequestException('Cannot create super admin users');
+    if (currentUserRoles && !currentUserRoles.includes('SUPER_ADMIN')) {
+      if (normalizedRole === 'ADMIN' || normalizedRole === 'SUPER_ADMIN') {
+        throw new BadRequestException('Admins can only create tenant and landlord users');
+      }
     }
 
     const user = await this.prisma.$transaction(async (tx) => {
@@ -592,7 +597,7 @@ export class AdminService {
     };
   }
 
-  async resetUserPassword(userId: string) {
+  async resetUserPassword(userId: string, currentUserRoles?: string[]) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {

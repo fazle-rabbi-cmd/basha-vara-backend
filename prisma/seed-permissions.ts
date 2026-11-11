@@ -26,6 +26,7 @@ const rolePermissions: Record<string, SystemPermission[]> = {
     SystemPermission.VISIT_UPDATE_ANY,
     SystemPermission.APPLICATION_READ_ANY,
     SystemPermission.APPLICATION_STATUS_UPDATE_OWN,
+    SystemPermission.USER_READ_ANY,
     SystemPermission.USER_READ_OWN,
     SystemPermission.USER_UPDATE_OWN,
   ],

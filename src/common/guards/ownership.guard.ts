@@ -57,9 +57,10 @@ export class OwnershipGuard implements CanActivate {
       case 'application':
         const application = await this.prisma.rentalApplication.findUnique({
           where: { id: resourceId },
-          select: { tenantId: true },
+          select: { tenantId: true, property: { select: { landlordId: true } } },
         });
-        return application?.tenantId === userId;
+        // Allow access if user is the tenant (for their own application) or landlord (property owner)
+        return application?.tenantId === userId || application?.property?.landlordId === userId;
 
       case 'favourite':
         const favourite = await this.prisma.favourite.findUnique({

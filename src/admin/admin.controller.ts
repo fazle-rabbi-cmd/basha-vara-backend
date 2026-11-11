@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -19,20 +20,20 @@ import { PropertyStatus, UserStatus } from '@prisma/client';
 @ApiTags('Admin')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN', 'SUPER_ADMIN')
+@Roles('MODERATOR', 'ADMIN', 'SUPER_ADMIN')
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('metrics')
-  @ApiOperation({ summary: 'Platform operational overview and statistics (Admin only)' })
+  @ApiOperation({ summary: 'Platform operational overview and statistics (Moderator, Admin, Super Admin)' })
   @ApiResponse({ status: 200, description: 'High-level counts of properties, users, visits, and applications' })
   async getMetrics() {
     return this.adminService.getMetrics();
   }
 
   @Get('properties')
-  @ApiOperation({ summary: 'List all properties for moderation (Admin only)' })
+  @ApiOperation({ summary: 'List all properties for moderation (Moderator, Admin, Super Admin)' })
   @ApiQuery({ name: 'status', enum: PropertyStatus, required: false })
   @ApiQuery({ name: 'search', type: String, required: false })
   async getProperties(
@@ -43,7 +44,7 @@ export class AdminController {
   }
 
   @Patch('properties/:id/status')
-  @ApiOperation({ summary: 'Override property status (Approve, Pause, Suspend, Archive) (Admin only)' })
+  @ApiOperation({ summary: 'Override property status (Approve, Pause, Suspend, Archive) (Moderator, Admin, Super Admin)' })
   async updatePropertyStatus(
     @Param('id') id: string,
     @Body('status') status: PropertyStatus,
@@ -74,13 +75,15 @@ export class AdminController {
   }
 
   @Patch('users/:id/role')
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Grant role to user account (Super Admin only)' })
+  @ApiOperation({ summary: 'Grant role to user account (Admin and Super Admin)' })
+  @ApiResponse({ status: 200, description: 'Role added successfully' })
+  @ApiResponse({ status: 400, description: 'Admins can only add tenant and landlord roles' })
   async updateUserRole(
+    @Request() req: any,
     @Param('id') id: string,
     @Body('role') role: string,
   ) {
-    return this.adminService.updateUserRole(id, role);
+    return this.adminService.updateUserRole(id, role, req.user.roles);
   }
 
   @Get('permissions')
@@ -135,31 +138,36 @@ export class AdminController {
   }
 
   @Delete('users/:userId/roles/:roleName')
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Remove a role from a user (Super Admin only)' })
+  @ApiOperation({ summary: 'Remove a role from a user (Admin and Super Admin)' })
+  @ApiResponse({ status: 200, description: 'Role removed successfully' })
+  @ApiResponse({ status: 400, description: 'Admins can only remove tenant and landlord roles' })
   async removeUserRole(
+    @Request() req: any,
     @Param('userId') userId: string,
     @Param('roleName') roleName: string,
   ) {
-    return this.adminService.removeUserRole(userId, roleName);
+    return this.adminService.removeUserRole(userId, roleName, req.user.roles);
   }
 
   @Post('users')
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Create a new user with auto-generated password (Super Admin only)' })
+  @ApiOperation({ summary: 'Create a new user with auto-generated password (Admin and Super Admin)' })
+  @ApiResponse({ status: 200, description: 'User created successfully with auto-generated password' })
+  @ApiResponse({ status: 400, description: 'Admins can only create tenant and landlord users' })
   async createUser(
+    @Request() req: any,
     @Body('email') email: string,
     @Body('fullName') fullName: string,
     @Body('role') role: string,
     @Body('phone') phone?: string,
   ) {
-    return this.adminService.createUser(email, fullName, phone, role);
+    return this.adminService.createUser(email, fullName, phone, role, req.user.roles);
   }
 
   @Post('users/:id/reset-password')
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Reset user password with auto-generated password (Super Admin only)' })
-  async resetUserPassword(@Param('id') id: string) {
-    return this.adminService.resetUserPassword(id);
+  @ApiOperation({ summary: 'Reset user password with auto-generated password (Admin and Super Admin)' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 400, description: 'Cannot reset super admin password' })
+  async resetUserPassword(@Request() req: any, @Param('id') id: string) {
+    return this.adminService.resetUserPassword(id, req.user.roles);
   }
 }

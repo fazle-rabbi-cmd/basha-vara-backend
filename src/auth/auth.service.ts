@@ -50,7 +50,7 @@ export class AuthService {
 
     // Check phone if provided
     if (dto.phone) {
-      const existingPhone = await this.prisma.user.findUnique({
+      const existingPhone = await this.prisma.user.findFirst({
         where: { phone: dto.phone.trim() },
       });
       if (existingPhone) {

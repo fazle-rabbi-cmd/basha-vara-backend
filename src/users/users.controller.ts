@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Patch,
   UseGuards,
 } from '@nestjs/common';
@@ -30,6 +31,14 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'User profile retrieved successfully' })
   async getMyProfile(@CurrentUser('id') userId: string) {
     return this.usersService.getUserById(userId);
+  }
+
+  @Get(':id')
+  @RequirePermissions(SystemPermission.USER_READ_ANY)
+  @ApiOperation({ summary: 'Get user by ID (for landlords to view tenant info)' })
+  @ApiResponse({ status: 200, description: 'User retrieved successfully' })
+  async getUserById(@Param('id') id: string) {
+    return this.usersService.getUserById(id);
   }
 
   @Patch('me')
