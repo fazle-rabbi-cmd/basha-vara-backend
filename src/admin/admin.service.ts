@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { ApplicationStatus, PropertyStatus, Role, UserStatus, VisitStatus } from '@prisma/client';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+import { ApplicationStatus, PropertyStatus, UserStatus, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { randomBytes } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AdminService {
@@ -26,9 +28,9 @@ export class AdminService {
       this.prisma.property.count({ where: { status: PropertyStatus.PAUSED } }),
       this.prisma.property.count({ where: { status: PropertyStatus.RENTED } }),
       this.prisma.user.count(),
-      this.prisma.userRole.count({ where: { role: Role.TENANT } }),
-      this.prisma.userRole.count({ where: { role: Role.LANDLORD } }),
-      this.prisma.userRole.count({ where: { role: Role.ADMIN } }),
+      this.prisma.userRole.count({ where: { role: { name: 'TENANT' } } }),
+      this.prisma.userRole.count({ where: { role: { name: 'LANDLORD' } } }),
+      this.prisma.userRole.count({ where: { role: { name: { in: ['ADMIN', 'SUPER_ADMIN'] } } } }),
       this.prisma.visitRequest.count(),
       this.prisma.visitRequest.count({ where: { status: VisitStatus.PENDING } }),
       this.prisma.rentalApplication.count(),
@@ -133,14 +135,14 @@ export class AdminService {
     });
   }
 
-  async getUsers(query?: { search?: string; role?: Role; status?: UserStatus }) {
+  async getUsers(query?: { search?: string; role?: string; status?: UserStatus }) {
     const where: any = {};
     if (query?.status) {
       where.status = query.status;
     }
     if (query?.role) {
       where.roles = {
-        some: { role: query.role },
+        some: { role: { name: query.role } },
       };
     }
     if (query?.search) {
@@ -156,7 +158,11 @@ export class AdminService {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        roles: true,
+        roles: {
+          include: {
+            role: true,
+          },
+        },
         tenantProfile: true,
         landlordProfile: true,
         _count: {
@@ -176,7 +182,7 @@ export class AdminService {
       phone: u.phone,
       avatarUrl: u.avatarUrl,
       status: u.status,
-      roles: u.roles.map((r) => r.role),
+      roles: u.roles.map((r) => r.role.name),
       tenantProfile: u.tenantProfile,
       landlordProfile: u.landlordProfile,
       createdAt: u.createdAt,
@@ -188,9 +194,28 @@ export class AdminService {
   }
 
   async updateUserStatus(id: string, status: UserStatus) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    const isSuperAdmin = user.roles.some((r) => r.role.name === 'SUPER_ADMIN');
+    if (isSuperAdmin) {
+      throw new BadRequestException('Cannot modify super admin account');
+    }
+
+    const isAdmin = user.roles.some((r) => r.role.name === 'ADMIN');
+    if (isAdmin) {
+      throw new BadRequestException('Cannot modify admin account. Only super admin can perform this action.');
     }
 
     return this.prisma.user.update({
@@ -202,28 +227,402 @@ export class AdminService {
     });
   }
 
-  async updateUserRole(id: string, role: Role) {
+  async updateUserRole(id: string, roleName: string) {
+    const normalizedRoleName = roleName.toUpperCase();
+
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: { roles: true },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
     });
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const hasRole = user.roles.some((r) => r.role === role);
+    const isSuperAdmin = user.roles.some((r) => r.role.name === 'SUPER_ADMIN');
+    if (isSuperAdmin) {
+      throw new BadRequestException('Cannot modify super admin account');
+    }
+
+    const role = await this.prisma.role.findUnique({
+      where: { name: normalizedRoleName },
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Role ${normalizedRoleName} not found`);
+    }
+
+    const hasRole = user.roles.some((r) => r.role.name === normalizedRoleName);
     if (!hasRole) {
       await this.prisma.userRole.create({
         data: {
           userId: id,
-          role,
+          roleId: role.id,
         },
       });
     }
 
     return this.prisma.user.findUnique({
       where: { id },
-      include: { roles: true },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
     });
+  }
+
+  async getPermissions() {
+    const permissions = await this.prisma.permission.findMany({
+      orderBy: { name: 'asc' },
+    });
+    return permissions;
+  }
+
+  async getRoles() {
+    const roles = await this.prisma.role.findMany({
+      include: {
+        rolePermissions: {
+          include: {
+            permission: true,
+          },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return roles.map((role) => ({
+      id: role.id,
+      name: role.name,
+      description: role.description,
+      permissions: role.rolePermissions.map((rp) => rp.permission),
+    }));
+  }
+
+  async updateRolePermissions(roleId: string, permissionIds: string[]) {
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: { rolePermissions: true },
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Role with ID ${roleId} not found`);
+    }
+
+    if (role.name === 'SUPER_ADMIN') {
+      throw new BadRequestException('Cannot modify super admin role permissions');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({
+        where: { roleId },
+      });
+
+      for (const permissionId of permissionIds) {
+        await tx.rolePermission.create({
+          data: {
+            roleId,
+            permissionId,
+          },
+        });
+      }
+    });
+
+    return this.prisma.role.findUnique({
+      where: { id: roleId },
+      include: {
+        rolePermissions: {
+          include: {
+            permission: true,
+          },
+        },
+      },
+    });
+  }
+
+  async createRole(name: string, displayName: string, description?: string, permissionIds?: string[]) {
+    const existingRole = await this.prisma.role.findUnique({
+      where: { name },
+    });
+
+    if (existingRole) {
+      throw new ConflictException(`Role with name ${name} already exists`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const role = await tx.role.create({
+        data: {
+          name,
+          displayName,
+          description,
+          isSystem: false,
+        },
+      });
+
+      if (permissionIds && permissionIds.length > 0) {
+        for (const permissionId of permissionIds) {
+          await tx.rolePermission.create({
+            data: {
+              roleId: role.id,
+              permissionId,
+            },
+          });
+        }
+      }
+
+      return tx.role.findUnique({
+        where: { id: role.id },
+        include: {
+          rolePermissions: {
+            include: {
+              permission: true,
+            },
+          },
+        },
+      });
+    });
+  }
+
+  async updateRole(id: string, displayName?: string, description?: string) {
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Role with ID ${id} not found`);
+    }
+
+    if (role.isSystem) {
+      throw new BadRequestException(`Cannot modify system role ${role.name}`);
+    }
+
+    return this.prisma.role.update({
+      where: { id },
+      data: {
+        ...(displayName && { displayName }),
+        ...(description !== undefined && { description }),
+      },
+    });
+  }
+
+  async deleteRole(id: string) {
+    const role = await this.prisma.role.findUnique({
+      where: { id },
+      include: {
+        userRoles: true,
+      },
+    });
+
+    if (!role) {
+      throw new NotFoundException(`Role with ID ${id} not found`);
+    }
+
+    if (role.isSystem) {
+      throw new BadRequestException(`Cannot delete system role ${role.name}`);
+    }
+
+    if (role.userRoles.length > 0) {
+      throw new BadRequestException(`Cannot delete role ${role.name} because it is assigned to users`);
+    }
+
+    await this.prisma.role.delete({
+      where: { id },
+    });
+
+    return { message: `Role ${role.name} deleted successfully` };
+  }
+
+  async removeUserRole(userId: string, roleName: string) {
+    const normalizedRoleName = roleName.toUpperCase();
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${userId} not found`);
+    }
+
+    const isSuperAdmin = user.roles.some((r) => r.role.name === 'SUPER_ADMIN');
+    if (isSuperAdmin) {
+      throw new BadRequestException('Cannot modify super admin account');
+    }
+
+    const isAdmin = user.roles.some((r) => r.role.name === 'ADMIN');
+    if (isAdmin) {
+      throw new BadRequestException('Cannot modify admin account. Only super admin can perform this action.');
+    }
+
+    const role = await this.prisma.role.findUnique({
+      where: { name: normalizedRoleName },
+    });
+
+    if (!role) {
+      throw new BadRequestException(`Role ${normalizedRoleName} not found`);
+    }
+
+    if (normalizedRoleName === 'ADMIN' || normalizedRoleName === 'SUPER_ADMIN') {
+      throw new BadRequestException('Cannot remove admin or super admin roles. Only super admin can perform this action.');
+    }
+
+    const userRole = await this.prisma.userRole.findUnique({
+      where: {
+        userId_roleId: {
+          userId,
+          roleId: role.id,
+        },
+      },
+      include: {
+        role: true,
+      },
+    });
+
+    if (!userRole) {
+      throw new BadRequestException(`User does not have this role`);
+    }
+
+    if (userRole.role.isSystem) {
+      const otherSystemRoles = await this.prisma.userRole.findMany({
+        where: {
+          userId,
+          role: {
+            isSystem: true,
+          },
+        },
+      });
+
+      if (otherSystemRoles.length <= 1) {
+        throw new BadRequestException(`Cannot remove the last system role from user`);
+      }
+    }
+
+    await this.prisma.userRole.delete({
+      where: {
+        userId_roleId: {
+          userId,
+          roleId: role.id,
+        },
+      },
+    });
+
+    return { message: 'Role removed from user successfully' };
+  }
+
+  private generateSecurePassword(): string {
+    const length = 16;
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    const randomValues = randomBytes(length);
+    let password = '';
+    for (let i = 0; i < length; i++) {
+      password += charset[randomValues[i] % charset.length];
+    }
+    return password;
+  }
+
+  async createUser(email: string, fullName: string, phone?: string, role: string = 'ADMIN') {
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedRole = role.toUpperCase();
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existingUser) {
+      throw new ConflictException('An account with this email already exists');
+    }
+
+    const password = this.generateSecurePassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const roleObj = await this.prisma.role.findUnique({
+      where: { name: normalizedRole },
+    });
+    if (!roleObj) {
+      throw new BadRequestException(`Role ${normalizedRole} not found`);
+    }
+
+    if (normalizedRole === 'SUPER_ADMIN') {
+      throw new BadRequestException('Cannot create super admin users');
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          email: normalizedEmail,
+          fullName,
+          phone,
+          passwordHash,
+          status: UserStatus.ACTIVE,
+        },
+      });
+
+      await tx.userRole.create({
+        data: {
+          userId: newUser.id,
+          roleId: roleObj.id,
+        },
+      });
+
+      return newUser;
+    });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        phone: user.phone,
+        status: user.status,
+      },
+      password,
+      message: 'User created successfully. Save this password - it will not be shown again.',
+    };
+  }
+
+  async resetUserPassword(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+      },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isSuperAdmin = user.roles.some((r) => r.role.name === 'SUPER_ADMIN');
+    if (isSuperAdmin) {
+      throw new BadRequestException('Cannot modify super admin account');
+    }
+
+    const password = this.generateSecurePassword();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return {
+      password,
+      message: 'Password reset successfully. Save this password - it will not be shown again.',
+    };
   }
 }

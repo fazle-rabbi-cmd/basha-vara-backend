@@ -9,16 +9,18 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagg
 import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
+import { PermissionsGuard } from '../common/guards/permissions.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
+import { RequirePermissions } from '../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UpdateTenantProfileDto } from './dto/update-tenant-profile.dto.js';
 import { UpdateLandlordProfileDto } from './dto/update-landlord-profile.dto.js';
-import { Role } from '@prisma/client';
+import { SystemPermission } from '@prisma/client';
 
 @ApiTags('Users')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -31,6 +33,7 @@ export class UsersController {
   }
 
   @Patch('me')
+  @RequirePermissions(SystemPermission.USER_UPDATE_OWN)
   @ApiOperation({ summary: 'Update basic user account info (name, phone, avatar)' })
   @ApiResponse({ status: 200, description: 'User account updated successfully' })
   async updateMyProfile(
@@ -41,7 +44,8 @@ export class UsersController {
   }
 
   @Patch('me/tenant-profile')
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.USER_UPDATE_OWN)
   @ApiOperation({ summary: 'Update tenant preferences and search criteria' })
   @ApiResponse({ status: 200, description: 'Tenant profile updated successfully' })
   async updateTenantProfile(
@@ -52,7 +56,8 @@ export class UsersController {
   }
 
   @Patch('me/landlord-profile')
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.USER_UPDATE_OWN)
   @ApiOperation({ summary: 'Update landlord profile and contact details' })
   @ApiResponse({ status: 200, description: 'Landlord profile updated successfully' })
   async updateLandlordProfile(

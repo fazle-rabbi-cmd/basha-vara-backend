@@ -4,12 +4,13 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import { UserStatus } from '@prisma/client';
+import { UserStatus, SystemPermission } from '@prisma/client';
 
 export interface JwtPayload {
   sub: string;
   email: string;
   roles: string[];
+  permissions?: SystemPermission[];
 }
 
 @Injectable()
@@ -38,13 +39,30 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: {
-        roles: true,
+        roles: {
+          include: {
+            role: {
+              include: {
+                rolePermissions: {
+                  include: {
+                    permission: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
     if (!user || user.status === UserStatus.SUSPENDED) {
       throw new UnauthorizedException('User account is invalid or suspended');
     }
+
+    const roleNames = user.roles.map((r) => r.role.name);
+    const permissions = user.roles.flatMap((r) =>
+      (r.role as any).rolePermissions?.map((rp: any) => rp.permission.name as SystemPermission) || [],
+    );
 
     return {
       id: user.id,
@@ -53,7 +71,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       phone: user.phone,
       avatarUrl: user.avatarUrl,
       status: user.status,
-      roles: user.roles.map((r) => r.role),
+      roles: roleNames,
+      permissions,
     };
   }
 }

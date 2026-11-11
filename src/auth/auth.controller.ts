@@ -10,7 +10,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
 import type { Response } from 'express';
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -93,8 +92,8 @@ export class AuthController {
 
   @Get('google/native/start')
   @ApiOperation({ summary: 'Start Google OAuth for the native app' })
-  async nativeGoogleStart(@Query('role') role: Role | undefined, @Res() res: Response) {
-    const requestedRole = role === Role.LANDLORD ? Role.LANDLORD : Role.TENANT;
+  async nativeGoogleStart(@Query('role') role: string | undefined, @Res() res: Response) {
+    const requestedRole = role === 'LANDLORD' ? 'LANDLORD' : 'TENANT';
     res.redirect(this.authService.getNativeGoogleAuthUrl(requestedRole));
   }
 

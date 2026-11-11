@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { PropertyStatus, Role } from '@prisma/client';
+import { PropertyStatus } from '@prisma/client';
 import { PropertiesService } from './properties.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreatePropertyDto } from './dto/create-property.dto.js';
@@ -48,7 +48,7 @@ describe('PropertiesService', () => {
 
   describe('findAll', () => {
     it('should return paginated properties', async () => {
-      const query: PropertyQueryDto = { page: '1', limit: '10' };
+      const query: PropertyQueryDto = { page: 1, limit: 10 };
       mockPrismaService.property.count.mockResolvedValue(20);
       mockPrismaService.property.findMany.mockResolvedValue([
         {
@@ -85,7 +85,7 @@ describe('PropertiesService', () => {
     });
 
     it('should filter by price range', async () => {
-      const query: PropertyQueryDto = { minRent: '10000', maxRent: '20000' };
+      const query: PropertyQueryDto = { minRent: 10000, maxRent: 20000 };
       mockPrismaService.property.count.mockResolvedValue(5);
       mockPrismaService.property.findMany.mockResolvedValue([]);
 
@@ -184,6 +184,7 @@ describe('PropertiesService', () => {
         bathrooms: 1,
         addressLine: '123 Street',
         area: 'Dhanmondi',
+        availableFrom: '2026-12-01',
         lat: 23.8103,
         lng: 90.4125,
       };
@@ -216,6 +217,7 @@ describe('PropertiesService', () => {
         bathrooms: 1,
         addressLine: '123 Street',
         area: 'Dhanmondi',
+        availableFrom: '2026-12-01',
         lat: 23.8103,
       };
 
@@ -246,7 +248,7 @@ describe('PropertiesService', () => {
         photos: [],
       });
 
-      const result = await service.update(propertyId, userId, [Role.LANDLORD], dto);
+      const result = await service.update(propertyId, userId, ['LANDLORD'], dto);
 
       expect(result.title).toBe(dto.title);
     });
@@ -272,7 +274,7 @@ describe('PropertiesService', () => {
         photos: [],
       });
 
-      const result = await service.update(propertyId, userId, [Role.ADMIN], dto);
+      const result = await service.update(propertyId, userId, ['ADMIN'], dto);
 
       expect(result.title).toBe(dto.title);
     });
@@ -289,13 +291,13 @@ describe('PropertiesService', () => {
         amenities: [],
       });
 
-      await expect(service.update(propertyId, userId, [Role.TENANT], dto)).rejects.toThrow(ForbiddenException);
+      await expect(service.update(propertyId, userId, ['TENANT'], dto)).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw NotFoundException for non-existent property', async () => {
       mockPrismaService.property.findUnique.mockResolvedValue(null);
 
-      await expect(service.update('nonexistent', 'user-1', [Role.LANDLORD], {})).rejects.toThrow(NotFoundException);
+      await expect(service.update('nonexistent', 'user-1', ['LANDLORD'], {})).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -311,7 +313,7 @@ describe('PropertiesService', () => {
       });
       mockPrismaService.property.delete.mockResolvedValue({ id: propertyId });
 
-      await service.deleteProperty(propertyId, userId, [Role.LANDLORD]);
+      await service.deleteProperty(propertyId, userId, ['LANDLORD']);
 
       expect(mockPrismaService.property.delete).toHaveBeenCalledWith({ where: { id: propertyId } });
     });
@@ -327,7 +329,7 @@ describe('PropertiesService', () => {
       });
       mockPrismaService.property.update.mockResolvedValue({ id: propertyId, status: PropertyStatus.ARCHIVED });
 
-      await service.deleteProperty(propertyId, userId, [Role.LANDLORD]);
+      await service.deleteProperty(propertyId, userId, ['LANDLORD']);
 
       expect(mockPrismaService.property.update).toHaveBeenCalledWith({
         where: { id: propertyId },
@@ -342,7 +344,7 @@ describe('PropertiesService', () => {
         status: PropertyStatus.DRAFT,
       });
 
-      await expect(service.deleteProperty('prop-1', 'user-1', [Role.TENANT])).rejects.toThrow(ForbiddenException);
+      await expect(service.deleteProperty('prop-1', 'user-1', ['TENANT'])).rejects.toThrow(ForbiddenException);
     });
   });
 

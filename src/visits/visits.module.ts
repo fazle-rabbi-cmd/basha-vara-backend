@@ -7,9 +7,11 @@ import {
   PropertyVisitsController,
 } from './visits.controller.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
+import { NotificationEmailQueueModule } from '../email/notification-email-queue.module.js';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, NotificationsModule, NotificationEmailQueueModule],
   controllers: [
     VisitsController,
     TenantVisitsController,

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, PropertyStatus, Role } from '@prisma/client';
+import { Prisma, PropertyStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreatePropertyDto } from './dto/create-property.dto.js';
 import { UpdatePropertyDto } from './dto/update-property.dto.js';
@@ -264,7 +264,7 @@ export class PropertiesService {
       throw new NotFoundException(`Property with ID ${id} not found`);
     }
 
-    const isAdmin = roles.includes(Role.ADMIN);
+    const isAdmin = roles.includes('ADMIN') || roles.includes('SUPER_ADMIN');
     if (!isAdmin && property.landlordId !== userId) {
       throw new ForbiddenException('You do not have permission to modify this property');
     }
@@ -355,7 +355,7 @@ export class PropertiesService {
       throw new NotFoundException(`Property with ID ${id} not found`);
     }
 
-    const isAdmin = roles.includes(Role.ADMIN);
+    const isAdmin = roles.includes('ADMIN') || roles.includes('SUPER_ADMIN');
     if (!isAdmin && property.landlordId !== userId) {
       throw new ForbiddenException('You do not have permission to change this property status');
     }
@@ -408,7 +408,7 @@ export class PropertiesService {
       throw new NotFoundException(`Property with ID ${id} not found`);
     }
 
-    const isAdmin = roles.includes(Role.ADMIN);
+    const isAdmin = roles.includes('ADMIN') || roles.includes('SUPER_ADMIN');
     if (!isAdmin && property.landlordId !== userId) {
       throw new ForbiddenException('You do not have permission to delete this property');
     }

@@ -64,7 +64,7 @@ export class UploadsService {
         throw new NotFoundException('Property not found');
       }
 
-      if (property.landlordId !== userId && !userRoles.includes('ADMIN')) {
+      if (property.landlordId !== userId && !userRoles.includes('ADMIN') && !userRoles.includes('SUPER_ADMIN')) {
         throw new ForbiddenException('You do not own this property');
       }
 
@@ -162,7 +162,7 @@ export class UploadsService {
       throw new NotFoundException('Photo not found');
     }
 
-    if (photo.property.landlordId !== userId && !userRoles.includes('ADMIN')) {
+    if (photo.property.landlordId !== userId && !userRoles.includes('ADMIN') && !userRoles.includes('SUPER_ADMIN')) {
       throw new ForbiddenException('You do not own this property');
     }
 

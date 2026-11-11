@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class GoogleAuthDto {
@@ -10,8 +9,8 @@ export class GoogleAuthDto {
   @IsString()
   credential: string;
 
-  @ApiProperty({ enum: [Role.TENANT, Role.LANDLORD], required: false })
+  @ApiProperty({ example: 'TENANT', required: false })
   @IsOptional()
-  @IsIn([Role.TENANT, Role.LANDLORD])
-  role?: Role;
+  @IsIn(['TENANT', 'LANDLORD'])
+  role?: string;
 }

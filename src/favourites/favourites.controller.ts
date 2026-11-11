@@ -14,7 +14,6 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
-import { Role } from '@prisma/client';
 
 @ApiTags('Favourites')
 @ApiBearerAuth('access-token')
@@ -24,7 +23,7 @@ export class FavouritesController {
   constructor(private readonly favouritesService: FavouritesService) {}
 
   @Get()
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Get list of saved favourite properties for current tenant' })
   @ApiResponse({ status: 200, description: 'List of favourited properties' })
   async getMyFavourites(@CurrentUser('id') tenantId: string) {
@@ -32,7 +31,7 @@ export class FavouritesController {
   }
 
   @Post(':propertyId')
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Save a property to tenant favourites' })
   @ApiResponse({ status: 201, description: 'Property added to favourites' })
   @ApiResponse({ status: 409, description: 'Property is already in favourites' })
@@ -45,7 +44,7 @@ export class FavouritesController {
 
   @Delete(':propertyId')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Remove a property from tenant favourites' })
   @ApiResponse({ status: 200, description: 'Property removed from favourites' })
   @ApiResponse({ status: 404, description: 'Favourite record not found' })

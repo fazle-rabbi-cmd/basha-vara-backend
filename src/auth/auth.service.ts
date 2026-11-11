@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Role, UserStatus } from '@prisma/client';
+import { UserStatus, SystemPermission } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
@@ -34,7 +34,7 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    if (dto.role === Role.ADMIN) {
+    if (dto.role === 'ADMIN' || dto.role === 'SUPER_ADMIN') {
       throw new BadRequestException('Admin accounts cannot be created through public registration.');
     }
 
@@ -61,9 +61,17 @@ export class AuthService {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(dto.password, saltRounds);
 
-    const assignedRole = dto.role ?? Role.TENANT;
+    const assignedRole = (dto.role ?? 'TENANT').toUpperCase();
 
     try {
+      const role = await this.prisma.role.findUnique({
+        where: { name: assignedRole },
+      });
+
+      if (!role) {
+        throw new BadRequestException(`Role ${assignedRole} not found`);
+      }
+
       const newUser = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
@@ -73,13 +81,13 @@ export class AuthService {
             phone: dto.phone?.trim() || null,
             status: UserStatus.ACTIVE,
             roles: {
-              create: [{ role: assignedRole }],
+              create: [{ roleId: role.id }],
             },
           },
         });
 
         // Initialize tenant or landlord profile
-        if (assignedRole === Role.LANDLORD) {
+        if (assignedRole === 'LANDLORD') {
           await tx.landlordProfile.create({
             data: {
               userId: user.id,
@@ -97,7 +105,11 @@ export class AuthService {
         return tx.user.findUnique({
           where: { id: user.id },
           include: {
-            roles: true,
+            roles: {
+              include: {
+                role: true,
+              },
+            },
             tenantProfile: true,
             landlordProfile: true,
           },
@@ -108,8 +120,11 @@ export class AuthService {
         throw new InternalServerErrorException('Failed to create user account');
       }
 
-      const roles = newUser.roles.map((r) => r.role);
-      const payload = { sub: newUser.id, email: newUser.email, roles };
+      const roles = newUser.roles.map((r) => r.role.name);
+      const permissions = newUser.roles.flatMap((r) =>
+        (r.role as any).rolePermissions?.map((rp: any) => rp.permission.name as SystemPermission) || [],
+      );
+      const payload = { sub: newUser.id, email: newUser.email, roles, permissions };
       const accessToken = this.jwtService.sign(payload);
 
       return {
@@ -121,6 +136,7 @@ export class AuthService {
           phone: newUser.phone,
           avatarUrl: newUser.avatarUrl,
           roles,
+          permissions,
           tenantProfile: newUser.tenantProfile,
           landlordProfile: newUser.landlordProfile,
         },
@@ -137,7 +153,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
       include: {
-        roles: true,
+        roles: {
+          include: {
+            role: true,
+          },
+        },
         tenantProfile: true,
         landlordProfile: true,
       },
@@ -160,8 +180,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const roles = user.roles.map((r) => r.role);
-    const payload = { sub: user.id, email: user.email, roles };
+    const roles = user.roles.map((r) => r.role.name);
+    const permissions = user.roles.flatMap((r) =>
+      (r.role as any).rolePermissions?.map((rp: any) => rp.permission.name as SystemPermission) || [],
+    );
+    const payload = { sub: user.id, email: user.email, roles, permissions };
     const accessToken = this.jwtService.sign(payload);
 
     return {
@@ -174,6 +197,7 @@ export class AuthService {
         avatarUrl: user.avatarUrl,
         hasPassword: Boolean(user.passwordHash),
         roles,
+        permissions,
         tenantProfile: user.tenantProfile,
         landlordProfile: user.landlordProfile,
       },
@@ -184,7 +208,19 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        roles: true,
+        roles: {
+          include: {
+            role: {
+              include: {
+                rolePermissions: {
+                  include: {
+                    permission: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         tenantProfile: true,
         landlordProfile: true,
       },
@@ -194,6 +230,11 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const roles = user.roles.map((r) => r.role.name);
+    const permissions = user.roles.flatMap((r) =>
+      (r.role as any).rolePermissions?.map((rp: any) => rp.permission.name as SystemPermission) || [],
+    );
+
     return {
       id: user.id,
       email: user.email,
@@ -202,7 +243,8 @@ export class AuthService {
       avatarUrl: user.avatarUrl,
       hasPassword: Boolean(user.passwordHash),
       status: user.status,
-      roles: user.roles.map((r) => r.role),
+      roles,
+      permissions,
       tenantProfile: user.tenantProfile,
       landlordProfile: user.landlordProfile,
       createdAt: user.createdAt,
@@ -210,7 +252,7 @@ export class AuthService {
     };
   }
 
-  async googleLogin(credential: string, requestedRole?: Role) {
+  async googleLogin(credential: string, requestedRole?: string) {
     try {
       this.logger.log(`Attempting Google login with credential length: ${credential?.length}`);
       this.logger.log(`GOOGLE_CLIENT_ID configured: ${!!process.env.GOOGLE_CLIENT_ID}`);
@@ -233,7 +275,11 @@ export class AuthService {
       let user = await this.prisma.user.findUnique({
         where: { email: normalizedEmail },
         include: {
-          roles: true,
+          roles: {
+            include: {
+              role: true,
+            },
+          },
           tenantProfile: true,
           landlordProfile: true,
         },
@@ -241,7 +287,15 @@ export class AuthService {
       let isNewUser = false;
 
       if (!user) {
-        const assignedRole = requestedRole ?? Role.TENANT;
+        const assignedRole = (requestedRole ?? 'TENANT').toUpperCase();
+        const role = await this.prisma.role.findUnique({
+          where: { name: assignedRole },
+        });
+
+        if (!role) {
+          throw new BadRequestException(`Role ${assignedRole} not found`);
+        }
+
         user = await this.prisma.$transaction(async (tx) => {
           const newUser = await tx.user.create({
             data: {
@@ -252,12 +306,12 @@ export class AuthService {
               status: UserStatus.ACTIVE,
               avatarUrl: payload.picture || null,
               roles: {
-                create: [{ role: assignedRole }],
+                create: [{ roleId: role.id }],
               },
             },
           });
 
-          if (assignedRole === Role.LANDLORD) {
+          if (assignedRole === 'LANDLORD') {
             await tx.landlordProfile.create({
               data: { userId: newUser.id, businessName: newUser.fullName },
             });
@@ -270,7 +324,11 @@ export class AuthService {
           return tx.user.findUnique({
             where: { id: newUser.id },
             include: {
-              roles: true,
+              roles: {
+                include: {
+                  role: true,
+                },
+              },
               tenantProfile: true,
               landlordProfile: true,
             },
@@ -298,8 +356,11 @@ export class AuthService {
         }
       }
 
-      const roles = user.roles.map((r) => r.role);
-      const jwtPayload = { sub: user.id, email: user.email, roles };
+      const roles = user.roles.map((r) => r.role.name);
+      const permissions = user.roles.flatMap((r) =>
+        (r.role as any).rolePermissions?.map((rp: any) => rp.permission.name as SystemPermission) || [],
+      );
+      const jwtPayload = { sub: user.id, email: user.email, roles, permissions };
       const accessToken = this.jwtService.sign(jwtPayload);
 
       return {
@@ -312,6 +373,7 @@ export class AuthService {
           avatarUrl: user.avatarUrl,
           hasPassword: Boolean(user.passwordHash),
           roles,
+          permissions,
           tenantProfile: user.tenantProfile,
           landlordProfile: user.landlordProfile,
         },
@@ -323,7 +385,7 @@ export class AuthService {
     }
   }
 
-  getNativeGoogleAuthUrl(requestedRole: Role = Role.TENANT) {
+  getNativeGoogleAuthUrl(requestedRole: string = 'TENANT') {
     const redirectUri = process.env.GOOGLE_NATIVE_REDIRECT_URI;
     if (!redirectUri) {
       throw new InternalServerErrorException('Google native redirect URI is not configured.');
@@ -344,7 +406,7 @@ export class AuthService {
 
   async completeNativeGoogleLogin(code: string, state: string) {
     try {
-      const statePayload = this.jwtService.verify<{ purpose: string; redirectUri: string; role?: Role }>(state);
+      const statePayload = this.jwtService.verify<{ purpose: string; redirectUri: string; role?: string }>(state);
       if (statePayload.purpose !== 'google-native') {
         throw new UnauthorizedException('Invalid Google OAuth state.');
       }

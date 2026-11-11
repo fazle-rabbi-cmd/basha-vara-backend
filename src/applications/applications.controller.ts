@@ -14,18 +14,24 @@ import { CreateRentalApplicationDto } from './dto/create-application.dto.js';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
+import { PermissionsGuard } from '../common/guards/permissions.guard.js';
+import { OwnershipGuard } from '../common/guards/ownership.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
+import { RequirePermissions } from '../common/decorators/permissions.decorator.js';
+import { RequireOwnership } from '../common/decorators/ownership.decorator.js';
 import { CurrentUser, AuthenticatedUser } from '../common/decorators/current-user.decorator.js';
-import { Role } from '@prisma/client';
+import { SystemPermission } from '@prisma/client';
 
 @ApiTags('Applications')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, OwnershipGuard)
 @Controller('applications')
 export class ApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
 
   @Patch(':id/status')
+  @RequirePermissions(SystemPermission.APPLICATION_STATUS_UPDATE_OWN)
+  @RequireOwnership('application', 'id')
   @ApiOperation({
     summary: 'Update rental application status (shortlist, reject, withdraw, or select final tenant)',
   })
@@ -47,7 +53,7 @@ export class TenantApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
 
   @Get()
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Get all rental applications submitted by current tenant' })
   @ApiResponse({ status: 200, description: 'List of submitted tenant rental applications' })
   async getMyApplications(@CurrentUser('id') tenantId: string) {
@@ -63,7 +69,7 @@ export class LandlordApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
 
   @Get()
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Get all rental applications submitted for landlord properties' })
   @ApiQuery({ name: 'propertyId', required: false, description: 'Filter by specific property ID' })
   @ApiResponse({ status: 200, description: 'List of applicants with tenant profile details' })
@@ -77,13 +83,14 @@ export class LandlordApplicationsController {
 
 @ApiTags('Applications')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('properties/:propertyId/applications')
 export class PropertyApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
 
   @Post()
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.APPLICATION_CREATE)
   @ApiOperation({ summary: 'Submit a formal rental application for a property (Tenant)' })
   @ApiResponse({ status: 201, description: 'Application submitted successfully' })
   @ApiResponse({ status: 400, description: 'Duplicate active application or property not accepting applications' })

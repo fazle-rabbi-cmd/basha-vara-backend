@@ -7,11 +7,17 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateVisitRequestDto } from './dto/create-visit-request.dto.js';
 import { UpdateVisitStatusDto } from './dto/update-visit-status.dto.js';
-import { Role, VisitStatus } from '@prisma/client';
+import { VisitStatus, NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { NotificationEmailQueueService } from '../email/notification-email-queue.service.js';
 
 @Injectable()
 export class VisitsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+    private emailQueueService: NotificationEmailQueueService,
+  ) {}
 
   async create(propertyId: string, tenantId: string, dto: CreateVisitRequestDto) {
     const property = await this.prisma.property.findUnique({
@@ -39,7 +45,7 @@ export class VisitsService {
       throw new BadRequestException('You already have an active pending visit request for this property');
     }
 
-    return this.prisma.visitRequest.create({
+    const visit = await this.prisma.visitRequest.create({
       data: {
         propertyId,
         tenantId,
@@ -58,10 +64,40 @@ export class VisitsService {
             city: true,
             rentAmount: true,
             photos: { take: 1 },
+            landlordId: true,
           },
         },
       },
     });
+
+    // Notify landlord
+    await this.notificationsService.create(
+      property.landlordId,
+      NotificationType.VISIT_REQUESTED,
+      'New Visit Request',
+      `A tenant has requested to visit your property: ${property.title}`,
+      { visitId: visit.id, propertyId, tenantId },
+    );
+
+    // Send email to landlord
+    const tenant = await this.prisma.user.findUnique({
+      where: { id: tenantId },
+      select: { fullName: true },
+    });
+    await this.emailQueueService.queueNotificationEmail(
+      property.landlordId,
+      'NEW_VISIT_REQUEST',
+      {
+        propertyTitle: property.title,
+        tenantName: tenant?.fullName || 'A tenant',
+        visitDate: visit.requestedDate.toISOString().split('T')[0],
+        visitTime: visit.requestedTime,
+        propertyId,
+        visitId: visit.id,
+      },
+    );
+
+    return visit;
   }
 
   async findTenantVisits(tenantId: string) {
@@ -143,7 +179,7 @@ export class VisitsService {
       throw new NotFoundException(`Visit request with ID ${visitId} not found`);
     }
 
-    const isAdmin = roles.includes(Role.ADMIN);
+    const isAdmin = roles.includes('ADMIN') || roles.includes('SUPER_ADMIN');
     const isLandlord = visit.property.landlordId === userId;
     const isTenant = visit.tenantId === userId;
 
@@ -164,7 +200,7 @@ export class VisitsService {
       }
     }
 
-    return this.prisma.visitRequest.update({
+    const updatedVisit = await this.prisma.visitRequest.update({
       where: { id: visitId },
       data: { status: dto.status },
       include: {
@@ -184,5 +220,62 @@ export class VisitsService {
         },
       },
     });
+
+    // Send notifications based on status change
+    let notificationType: NotificationType;
+    let notificationTitle: string;
+    let notificationMessage: string;
+    let recipientId: string;
+    let emailPurpose: string | null = null;
+
+    if (dto.status === VisitStatus.ACCEPTED) {
+      notificationType = NotificationType.VISIT_ACCEPTED;
+      notificationTitle = 'Visit Request Accepted';
+      notificationMessage = `Your visit request for ${updatedVisit.property.title} has been accepted`;
+      recipientId = visit.tenantId;
+      emailPurpose = 'VISIT_ACCEPTED';
+    } else if (dto.status === VisitStatus.DECLINED) {
+      notificationType = NotificationType.VISIT_DECLINED;
+      notificationTitle = 'Visit Request Declined';
+      notificationMessage = `Your visit request for ${updatedVisit.property.title} has been declined`;
+      recipientId = visit.tenantId;
+    } else if (dto.status === VisitStatus.CANCELLED) {
+      notificationType = NotificationType.VISIT_CANCELLED;
+      notificationTitle = 'Visit Request Cancelled';
+      notificationMessage = `The visit request for ${updatedVisit.property.title} has been cancelled`;
+      recipientId = isTenant ? visit.property.landlordId : visit.tenantId;
+    } else if (dto.status === VisitStatus.COMPLETED) {
+      notificationType = NotificationType.VISIT_COMPLETED;
+      notificationTitle = 'Visit Completed';
+      notificationMessage = `The visit for ${updatedVisit.property.title} has been marked as completed`;
+      recipientId = visit.tenantId;
+    } else {
+      return updatedVisit;
+    }
+
+    await this.notificationsService.create(
+      recipientId,
+      notificationType,
+      notificationTitle,
+      notificationMessage,
+      { visitId, propertyId: visit.propertyId },
+    );
+
+    // Send email for important notifications
+    if (emailPurpose) {
+      await this.emailQueueService.queueNotificationEmail(
+        recipientId,
+        emailPurpose as any,
+        {
+          propertyTitle: updatedVisit.property.title,
+          visitDate: updatedVisit.requestedDate.toISOString().split('T')[0],
+          visitTime: updatedVisit.requestedTime,
+          propertyId: visit.propertyId,
+          visitId,
+        },
+      );
+    }
+
+    return updatedVisit;
   }
 }
