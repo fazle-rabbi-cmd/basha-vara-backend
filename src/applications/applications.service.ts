@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ApplicationStatus, Prisma, PropertyStatus, NotificationType } from '@prisma/client';
+import { ApplicationStatus, Prisma, PropertyStatus, NotificationType, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateRentalApplicationDto } from './dto/create-application.dto.js';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto.js';
@@ -251,6 +251,49 @@ export class ApplicationsService {
           },
           data: { status: ApplicationStatus.REJECTED },
         });
+
+        // Auto-cancel pending visit requests for this property
+        const pendingVisits = await tx.visitRequest.findMany({
+          where: {
+            propertyId: application.propertyId,
+            status: VisitStatus.PENDING,
+          },
+          select: {
+            id: true,
+            tenantId: true,
+          },
+        });
+
+        if (pendingVisits.length > 0) {
+          await tx.visitRequest.updateMany({
+            where: {
+              propertyId: application.propertyId,
+              status: VisitStatus.PENDING,
+            },
+            data: { status: VisitStatus.CANCELLED },
+          });
+
+          // Notify tenants whose visit requests were cancelled
+          for (const visit of pendingVisits) {
+            await this.notificationsService.create(
+              visit.tenantId,
+              NotificationType.VISIT_CANCELLED,
+              'Visit Request Cancelled',
+              `Your visit request for ${selectedApp.property.title} has been cancelled as the property is now rented`,
+              { propertyId: application.propertyId },
+            );
+
+            // Send email notification
+            await this.emailQueueService.queueNotificationEmail(
+              visit.tenantId,
+              'VISIT_CANCELLED',
+              {
+                propertyTitle: selectedApp.property.title,
+                propertyId: application.propertyId,
+              },
+            );
+          }
+        }
 
         // Notify selected tenant
         await this.notificationsService.create(
