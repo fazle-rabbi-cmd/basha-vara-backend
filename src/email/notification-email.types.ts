@@ -4,7 +4,8 @@ export type NotificationEmailPurpose =
   | 'NEW_VISIT_REQUEST'
   | 'NEW_APPLICATION'
   | 'APPLICATION_SELECTED'
-  | 'VISIT_ACCEPTED';
+  | 'VISIT_ACCEPTED'
+  | 'VISIT_CANCELLED';
 
 export interface NotificationEmailJob {
   userId: string;

@@ -167,6 +167,26 @@ export class NotificationEmailWorkerService implements OnModuleInit, OnModuleDes
           ].join('\n'),
         };
 
+      case 'VISIT_CANCELLED':
+        return {
+          subject: `Visit Request Cancelled: ${data.propertyTitle}`,
+          text: [
+            `Hello ${userName},`,
+            '',
+            `Your visit request for ${data.propertyTitle} has been cancelled.`,
+            '',
+            `This is because the property has been rented by another tenant.`,
+            '',
+            `We apologize for any inconvenience. You can continue browsing other available properties.`,
+            '',
+            `You can view your visit status in your dashboard.`,
+            `${frontendUrl}/tenant/visits`,
+            '',
+            'Best regards,',
+            'Basha Vara Team',
+          ].join('\n'),
+        };
+
       default:
         return {
           subject: 'Basha Vara Notification',
