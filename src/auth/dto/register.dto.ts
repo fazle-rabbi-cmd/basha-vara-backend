@@ -1,5 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
 import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class RegisterDto {
@@ -23,8 +22,8 @@ export class RegisterDto {
   @IsString()
   phone?: string;
 
-  @ApiPropertyOptional({ enum: Role, default: Role.TENANT, description: 'Role on the platform' })
+  @ApiPropertyOptional({ example: 'TENANT', default: 'TENANT', description: 'Role on the platform' })
   @IsOptional()
-  @IsIn([Role.TENANT, Role.LANDLORD], { message: 'Role must be either TENANT or LANDLORD' })
-  role?: Role = Role.TENANT;
+  @IsIn(['TENANT', 'LANDLORD'], { message: 'Role must be either TENANT or LANDLORD' })
+  role?: string = 'TENANT';
 }

@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
-import { Role, UserStatus } from '@prisma/client';
+import { UserStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { AuthService } from './auth.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -73,7 +73,7 @@ describe('AuthService', () => {
         email: 'admin@example.com',
         password: 'Password123!',
         fullName: 'Unauthorized Admin',
-        role: Role.ADMIN,
+        role: 'ADMIN',
       })).rejects.toThrow('Admin accounts cannot be created through public registration');
     });
 
@@ -82,7 +82,7 @@ describe('AuthService', () => {
         email: 'test@example.com',
         password: 'Password123!',
         fullName: 'Test User',
-        role: Role.TENANT,
+        role: 'TENANT',
       };
 
       mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
@@ -94,7 +94,7 @@ describe('AuthService', () => {
               email: dto.email,
               fullName: dto.fullName,
               status: UserStatus.ACTIVE,
-              roles: [{ role: Role.TENANT }],
+              roles: [{ role: { name: 'TENANT' } }],
               tenantProfile: { id: 'tenant-1' },
               landlordProfile: null,
             }),
@@ -103,7 +103,7 @@ describe('AuthService', () => {
               email: dto.email,
               fullName: dto.fullName,
               status: UserStatus.ACTIVE,
-              roles: [{ role: Role.TENANT }],
+              roles: [{ role: { name: 'TENANT' } }],
               tenantProfile: { id: 'tenant-1' },
               landlordProfile: null,
             }),
@@ -123,7 +123,7 @@ describe('AuthService', () => {
 
       expect(result).toHaveProperty('accessToken', 'jwt-token');
       expect(result.user).toHaveProperty('email', dto.email);
-      expect(result.user.roles).toContain(Role.TENANT);
+      expect(result.user.roles).toContain('TENANT');
     });
 
     it('should throw ConflictException if email already exists', async () => {
@@ -172,7 +172,7 @@ describe('AuthService', () => {
                 email: dto.email,
                 fullName: dto.fullName,
                 status: UserStatus.ACTIVE,
-                roles: [{ role: Role.TENANT }],
+                roles: [{ role: { name: 'TENANT' } }],
                 tenantProfile: { id: 'tenant-1' },
                 landlordProfile: null,
               };
@@ -182,7 +182,7 @@ describe('AuthService', () => {
               email: dto.email,
               fullName: dto.fullName,
               status: UserStatus.ACTIVE,
-              roles: [{ role: Role.TENANT }],
+              roles: [{ role: { name: 'TENANT' } }],
               tenantProfile: { id: 'tenant-1' },
               landlordProfile: null,
             }),
@@ -230,7 +230,7 @@ describe('AuthService', () => {
         passwordHash: hashedPassword,
         status: UserStatus.ACTIVE,
         fullName: 'Test User',
-        roles: [{ role: Role.TENANT }],
+        roles: [{ role: { name: 'TENANT' } }],
         tenantProfile: { id: 'tenant-1' },
         landlordProfile: null,
       });
@@ -265,7 +265,7 @@ describe('AuthService', () => {
         email: dto.email,
         passwordHash: hashedPassword,
         status: UserStatus.ACTIVE,
-        roles: [{ role: Role.TENANT }],
+        roles: [{ role: { name: 'TENANT' } }],
       });
 
       await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
@@ -283,7 +283,7 @@ describe('AuthService', () => {
         email: dto.email,
         passwordHash: hashedPassword,
         status: UserStatus.SUSPENDED,
-        roles: [{ role: Role.TENANT }],
+        roles: [{ role: { name: 'TENANT' } }],
       });
 
       await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
@@ -301,7 +301,7 @@ describe('AuthService', () => {
         phone: null,
         avatarUrl: null,
         status: UserStatus.ACTIVE,
-        roles: [{ role: Role.LANDLORD }],
+        roles: [{ role: { name: 'LANDLORD' } }],
         tenantProfile: null,
         landlordProfile,
       };
@@ -321,18 +321,18 @@ describe('AuthService', () => {
       mockPrismaService.$transaction.mockImplementation((callback) => callback(transaction));
       mockJwtService.sign.mockReturnValue('jwt-token');
 
-      const result = await service.googleLogin('google-id-token', Role.LANDLORD);
+      const result = await service.googleLogin('google-id-token', 'LANDLORD');
 
       expect(transaction.user.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
-          roles: { create: [{ role: Role.LANDLORD }] },
+          roles: { create: [{ roleId: 'role-id' }] },
         }),
       }));
       expect(transaction.landlordProfile.create).toHaveBeenCalledWith({
         data: { userId: createdUser.id, businessName: createdUser.fullName },
       });
       expect(transaction.tenantProfile.create).not.toHaveBeenCalled();
-      expect(result.user.roles).toContain(Role.LANDLORD);
+      expect(result.user.roles).toContain('LANDLORD');
     });
 
     it('should create a passwordless user and queue an account-created email', async () => {
@@ -344,7 +344,7 @@ describe('AuthService', () => {
         phone: null,
         avatarUrl: null,
         status: UserStatus.ACTIVE,
-        roles: [{ role: Role.TENANT }],
+        roles: [{ role: { name: 'TENANT' } }],
         tenantProfile: { id: 'tenant-1' },
         landlordProfile: null,
       };
@@ -452,7 +452,7 @@ describe('AuthService', () => {
         email: 'test@example.com',
         fullName: 'Test User',
         status: UserStatus.ACTIVE,
-        roles: [{ role: Role.TENANT }],
+        roles: [{ role: { name: 'TENANT' } }],
         tenantProfile: { id: 'tenant-1' },
         landlordProfile: null,
       });

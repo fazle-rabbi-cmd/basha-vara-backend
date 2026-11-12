@@ -6,12 +6,14 @@ import { UploadIntentResponseDto } from './dto/upload-intent-response.dto.js';
 import { CompleteUploadDto } from './dto/complete-upload.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
+import { PermissionsGuard } from '../common/guards/permissions.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
-import { Role } from '@prisma/client';
+import { RequirePermissions } from '../common/decorators/permissions.decorator.js';
+import { SystemPermission } from '@prisma/client';
 
 @ApiTags('uploads')
 @Controller('uploads')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class UploadsController {
   constructor(private readonly uploadsService: UploadsService) {}
@@ -41,7 +43,8 @@ export class UploadsController {
   @Delete('properties/:propertyId/photos/:photoId')
   @ApiOperation({ summary: 'Delete property photo' })
   @ApiResponse({ status: 200, description: 'Photo deleted successfully' })
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.PROPERTY_UPDATE_OWN)
   async deletePropertyPhoto(
     @Request() req: any,
     @Param('propertyId') propertyId: string,

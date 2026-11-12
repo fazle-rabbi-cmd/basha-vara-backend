@@ -13,7 +13,11 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        roles: true,
+        roles: {
+          include: {
+            role: true,
+          },
+        },
         tenantProfile: true,
         landlordProfile: true,
       },
@@ -30,7 +34,7 @@ export class UsersService {
       phone: user.phone,
       avatarUrl: user.avatarUrl,
       status: user.status,
-      roles: user.roles.map((r) => r.role),
+      roles: user.roles.map((r) => r.role.name),
       tenantProfile: user.tenantProfile,
       landlordProfile: user.landlordProfile,
       createdAt: user.createdAt,
@@ -47,7 +51,11 @@ export class UsersService {
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl.trim() }),
       },
       include: {
-        roles: true,
+        roles: {
+          include: {
+            role: true,
+          },
+        },
         tenantProfile: true,
         landlordProfile: true,
       },
@@ -60,7 +68,7 @@ export class UsersService {
       phone: updated.phone,
       avatarUrl: updated.avatarUrl,
       status: updated.status,
-      roles: updated.roles.map((r) => r.role),
+      roles: updated.roles.map((r) => r.role.name),
       tenantProfile: updated.tenantProfile,
       landlordProfile: updated.landlordProfile,
     };

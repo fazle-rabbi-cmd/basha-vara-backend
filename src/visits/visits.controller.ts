@@ -13,18 +13,24 @@ import { CreateVisitRequestDto } from './dto/create-visit-request.dto.js';
 import { UpdateVisitStatusDto } from './dto/update-visit-status.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
+import { PermissionsGuard } from '../common/guards/permissions.guard.js';
+import { OwnershipGuard } from '../common/guards/ownership.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
+import { RequirePermissions } from '../common/decorators/permissions.decorator.js';
+import { RequireOwnership } from '../common/decorators/ownership.decorator.js';
 import { CurrentUser, AuthenticatedUser } from '../common/decorators/current-user.decorator.js';
-import { Role } from '@prisma/client';
+import { SystemPermission } from '@prisma/client';
 
 @ApiTags('Visits')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, OwnershipGuard)
 @Controller('visits')
 export class VisitsController {
   constructor(private readonly visitsService: VisitsService) {}
 
   @Patch(':id/status')
+  @RequirePermissions(SystemPermission.VISIT_UPDATE_OWN)
+  @RequireOwnership('visit', 'id')
   @ApiOperation({ summary: 'Update visit request status (accept, decline, cancel, or complete)' })
   @ApiResponse({ status: 200, description: 'Visit status updated successfully' })
   async updateStatus(
@@ -44,7 +50,7 @@ export class TenantVisitsController {
   constructor(private readonly visitsService: VisitsService) {}
 
   @Get()
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Get all visit requests submitted by current tenant' })
   @ApiResponse({ status: 200, description: 'List of tenant visit requests' })
   async getMyVisits(@CurrentUser('id') tenantId: string) {
@@ -60,7 +66,7 @@ export class LandlordVisitsController {
   constructor(private readonly visitsService: VisitsService) {}
 
   @Get()
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
   @ApiOperation({ summary: 'Get all visit requests submitted for landlord properties' })
   @ApiResponse({ status: 200, description: 'List of landlord property visit requests' })
   async getLandlordVisits(@CurrentUser('id') landlordId: string) {
@@ -70,13 +76,14 @@ export class LandlordVisitsController {
 
 @ApiTags('Visits')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('properties/:propertyId/visits')
 export class PropertyVisitsController {
   constructor(private readonly visitsService: VisitsService) {}
 
   @Post()
-  @Roles(Role.TENANT, Role.ADMIN)
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.VISIT_CREATE)
   @ApiOperation({ summary: 'Submit a physical property visit request (Tenant)' })
   @ApiResponse({ status: 201, description: 'Visit request submitted successfully' })
   @ApiResponse({ status: 400, description: 'Duplicate pending visit or self-booking attempt' })

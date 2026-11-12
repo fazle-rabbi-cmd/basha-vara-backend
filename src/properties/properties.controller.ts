@@ -18,11 +18,16 @@ import { PropertiesService } from './properties.service.js';
 import { PropertyQueryDto } from './dto/property-query.dto.js';
 import { CreatePropertyDto } from './dto/create-property.dto.js';
 import { UpdatePropertyDto } from './dto/update-property.dto.js';
+import { CreateCustomAmenityDto } from './dto/create-custom-amenity.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
+import { PermissionsGuard } from '../common/guards/permissions.guard.js';
+import { OwnershipGuard } from '../common/guards/ownership.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
+import { RequirePermissions } from '../common/decorators/permissions.decorator.js';
+import { RequireOwnership } from '../common/decorators/ownership.decorator.js';
 import { CurrentUser, AuthenticatedUser } from '../common/decorators/current-user.decorator.js';
-import { PropertyStatus, Role } from '@prisma/client';
+import { PropertyStatus, SystemPermission } from '@prisma/client';
 
 @ApiTags('Properties')
 @Controller('properties')
@@ -36,9 +41,30 @@ export class PropertiesController {
     return this.propertiesService.findAll(query);
   }
 
+  @Get('amenities/list')
+  @ApiOperation({ summary: 'Get all available amenities' })
+  @ApiResponse({ status: 200, description: 'List of all amenities' })
+  async getAmenities() {
+    return this.propertiesService.getAmenities();
+  }
+
+  @Post('amenities/custom')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a custom amenity' })
+  @ApiResponse({ status: 201, description: 'Custom amenity created successfully' })
+  @ApiResponse({ status: 409, description: 'Amenity with this name already exists' })
+  async createCustomAmenity(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateCustomAmenityDto,
+  ) {
+    return this.propertiesService.createCustomAmenity(userId, dto);
+  }
+
   @Get('landlord/mine')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List all properties managed by authenticated landlord' })
   @ApiQuery({ name: 'status', enum: PropertyStatus, required: false })
@@ -64,8 +90,9 @@ export class PropertiesController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.PROPERTY_CREATE)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a new property listing (Landlords and Admins)' })
   @ApiResponse({ status: 201, description: 'Property successfully created' })
@@ -77,8 +104,10 @@ export class PropertiesController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, OwnershipGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.PROPERTY_UPDATE_OWN)
+  @RequireOwnership('property', 'id')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update an existing property listing' })
   @ApiResponse({ status: 200, description: 'Property updated successfully' })
@@ -93,8 +122,10 @@ export class PropertiesController {
 
   @Post(':id/publish')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, OwnershipGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.PROPERTY_CHANGE_STATUS_OWN)
+  @RequireOwnership('property', 'id')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Publish a draft or paused property listing' })
   @ApiResponse({ status: 200, description: 'Property status changed to PUBLISHED' })
@@ -107,8 +138,10 @@ export class PropertiesController {
 
   @Post(':id/pause')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, OwnershipGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.PROPERTY_CHANGE_STATUS_OWN)
+  @RequireOwnership('property', 'id')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Pause a published property listing' })
   @ApiResponse({ status: 200, description: 'Property status changed to PAUSED' })
@@ -121,8 +154,10 @@ export class PropertiesController {
 
   @Post(':id/mark-rented')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, OwnershipGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.PROPERTY_CHANGE_STATUS_OWN)
+  @RequireOwnership('property', 'id')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Mark property listing as rented out' })
   @ApiResponse({ status: 200, description: 'Property status changed to RENTED' })
@@ -134,8 +169,10 @@ export class PropertiesController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.LANDLORD, Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard, OwnershipGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @RequirePermissions(SystemPermission.PROPERTY_DELETE_OWN)
+  @RequireOwnership('property', 'id')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Archive or remove a property listing' })
   @ApiResponse({ status: 200, description: 'Property archived or deleted successfully' })

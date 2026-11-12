@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { VisitStatus, Role } from '@prisma/client';
+import { VisitStatus } from '@prisma/client';
 import { VisitsService } from './visits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateVisitRequestDto } from './dto/create-visit-request.dto.js';
@@ -149,7 +149,7 @@ describe('VisitsService', () => {
     it('should allow landlord to approve visit', async () => {
       const visitId = 'visit-1';
       const userId = 'landlord-1';
-      const dto: UpdateVisitStatusDto = { status: VisitStatus.APPROVED };
+      const dto: UpdateVisitStatusDto = { status: VisitStatus.ACCEPTED };
 
       mockPrismaService.visitRequest.findUnique.mockResolvedValue({
         id: visitId,
@@ -159,10 +159,10 @@ describe('VisitsService', () => {
       });
       mockPrismaService.visitRequest.update.mockResolvedValue({
         id: visitId,
-        status: VisitStatus.APPROVED,
+        status: VisitStatus.ACCEPTED,
       });
 
-      const result = await service.updateStatus(visitId, userId, [Role.LANDLORD], dto);
+      const result = await service.updateStatus(visitId, userId, ['LANDLORD'], dto);
 
       expect(result.status).toBe(VisitStatus.APPROVED);
     });
@@ -183,7 +183,7 @@ describe('VisitsService', () => {
         status: VisitStatus.CANCELLED,
       });
 
-      const result = await service.updateStatus(visitId, userId, [Role.TENANT], dto);
+      const result = await service.updateStatus(visitId, userId, ['TENANT'], dto);
 
       expect(result.status).toBe(VisitStatus.CANCELLED);
     });
@@ -191,7 +191,7 @@ describe('VisitsService', () => {
     it('should allow admin to update any visit', async () => {
       const visitId = 'visit-1';
       const userId = 'admin-1';
-      const dto: UpdateVisitStatusDto = { status: VisitStatus.APPROVED };
+      const dto: UpdateVisitStatusDto = { status: VisitStatus.ACCEPTED };
 
       mockPrismaService.visitRequest.findUnique.mockResolvedValue({
         id: visitId,
@@ -201,10 +201,10 @@ describe('VisitsService', () => {
       });
       mockPrismaService.visitRequest.update.mockResolvedValue({
         id: visitId,
-        status: VisitStatus.APPROVED,
+        status: VisitStatus.ACCEPTED,
       });
 
-      const result = await service.updateStatus(visitId, userId, [Role.ADMIN], dto);
+      const result = await service.updateStatus(visitId, userId, ['ADMIN'], dto);
 
       expect(result.status).toBe(VisitStatus.APPROVED);
     });
@@ -212,7 +212,7 @@ describe('VisitsService', () => {
     it('should throw ForbiddenException for unauthorized user', async () => {
       const visitId = 'visit-1';
       const userId = 'user-1';
-      const dto: UpdateVisitStatusDto = { status: VisitStatus.APPROVED };
+      const dto: UpdateVisitStatusDto = { status: VisitStatus.ACCEPTED };
 
       mockPrismaService.visitRequest.findUnique.mockResolvedValue({
         id: visitId,
@@ -221,13 +221,13 @@ describe('VisitsService', () => {
         property: { landlordId: 'landlord-1' },
       });
 
-      await expect(service.updateStatus(visitId, userId, [Role.TENANT], dto)).rejects.toThrow(ForbiddenException);
+      await expect(service.updateStatus(visitId, userId, ['TENANT'], dto)).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw ForbiddenException for tenant trying to approve', async () => {
       const visitId = 'visit-1';
       const userId = 'tenant-1';
-      const dto: UpdateVisitStatusDto = { status: VisitStatus.APPROVED };
+      const dto: UpdateVisitStatusDto = { status: VisitStatus.ACCEPTED };
 
       mockPrismaService.visitRequest.findUnique.mockResolvedValue({
         id: visitId,
@@ -236,13 +236,13 @@ describe('VisitsService', () => {
         property: { landlordId: 'landlord-1' },
       });
 
-      await expect(service.updateStatus(visitId, userId, [Role.TENANT], dto)).rejects.toThrow(ForbiddenException);
+      await expect(service.updateStatus(visitId, userId, ['TENANT'], dto)).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw NotFoundException for non-existent visit', async () => {
       mockPrismaService.visitRequest.findUnique.mockResolvedValue(null);
 
-      await expect(service.updateStatus('nonexistent', 'user-1', [Role.TENANT], {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.updateStatus('nonexistent', 'user-1', ['TENANT'], {} as any)).rejects.toThrow(NotFoundException);
     });
   });
 });
