@@ -18,6 +18,7 @@ import { PropertiesService } from './properties.service.js';
 import { PropertyQueryDto } from './dto/property-query.dto.js';
 import { CreatePropertyDto } from './dto/create-property.dto.js';
 import { UpdatePropertyDto } from './dto/update-property.dto.js';
+import { CreateCustomAmenityDto } from './dto/create-custom-amenity.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { PermissionsGuard } from '../common/guards/permissions.guard.js';
@@ -38,6 +39,27 @@ export class PropertiesController {
   @ApiResponse({ status: 200, description: 'Paginated list of properties matching filter criteria' })
   async getProperties(@Query() query: PropertyQueryDto) {
     return this.propertiesService.findAll(query);
+  }
+
+  @Get('amenities/list')
+  @ApiOperation({ summary: 'Get all available amenities' })
+  @ApiResponse({ status: 200, description: 'List of all amenities' })
+  async getAmenities() {
+    return this.propertiesService.getAmenities();
+  }
+
+  @Post('amenities/custom')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a custom amenity' })
+  @ApiResponse({ status: 201, description: 'Custom amenity created successfully' })
+  @ApiResponse({ status: 409, description: 'Amenity with this name already exists' })
+  async createCustomAmenity(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateCustomAmenityDto,
+  ) {
+    return this.propertiesService.createCustomAmenity(userId, dto);
   }
 
   @Get('landlord/mine')

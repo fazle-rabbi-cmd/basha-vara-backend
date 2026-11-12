@@ -292,6 +292,26 @@ export class AdminService {
     return permissions;
   }
 
+  async createPermission(name: string, description?: string, category?: string) {
+    const existing = await this.prisma.permission.findUnique({
+      where: { name },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Permission with this name already exists');
+    }
+
+    const permission = await this.prisma.permission.create({
+      data: {
+        name,
+        description: description || '',
+        category: category || 'general',
+      },
+    });
+
+    return permission;
+  }
+
   async getRoles() {
     const roles = await this.prisma.role.findMany({
       include: {

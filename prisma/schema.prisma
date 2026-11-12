@@ -27,6 +27,8 @@ model User {
   visitRequestsMade VisitRequest[]        @relation("TenantVisits")
   notifications     Notification[]
   applicationProfile ApplicationProfile?
+  userDocuments     UserDocument[]
+  customAmenities   Amenity[]          @relation("CustomAmenities")
 
   @@map("users")
 }
@@ -175,12 +177,19 @@ model PropertyPhoto {
 
 model Amenity {
   id         String            @id @default(uuid()) @db.Uuid
-  name       String            @unique
+  name       String
   slug       String            @unique
   icon       String?
   category   AmenityCategory   @default(ESSENTIAL)
+  isCustom   Boolean           @default(false)
+  createdBy  String?           @db.Uuid
+  usageCount Int              @default(0)
   properties PropertyAmenity[]
+  creator    User?             @relation("CustomAmenities", fields: [createdBy], references: [id], onDelete: SetNull)
 
+  @@unique([name, isCustom])
+  @@index([isCustom])
+  @@index([createdBy])
   @@map("amenities")
 }
 
@@ -448,4 +457,20 @@ model ApplicationDocument {
 
   @@index([applicationId])
   @@map("application_documents")
+}
+
+model UserDocument {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  documentType    String
+  fileName        String
+  fileUrl         String
+  fileSize        Int
+  mimeType        String
+  uploadedAt      DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, documentType])
+  @@map("user_documents")
 }

@@ -1,14 +1,16 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, PropertyStatus } from '@prisma/client';
+import { Prisma, PropertyStatus, AmenityCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreatePropertyDto } from './dto/create-property.dto.js';
 import { UpdatePropertyDto } from './dto/update-property.dto.js';
 import { PropertyQueryDto } from './dto/property-query.dto.js';
+import { CreateCustomAmenityDto } from './dto/create-custom-amenity.dto.js';
 
 @Injectable()
 export class PropertiesService {
@@ -430,5 +432,35 @@ export class PropertiesService {
     return this.prisma.amenity.findMany({
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     });
+  }
+
+  async createCustomAmenity(userId: string, dto: CreateCustomAmenityDto) {
+    const slug = dto.name
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^\w-]+/g, '');
+
+    try {
+      const amenity = await this.prisma.amenity.create({
+        data: {
+          name: dto.name.trim(),
+          slug,
+          category: dto.category,
+          isCustom: true,
+          createdBy: userId,
+          usageCount: 0,
+        },
+      });
+
+      return amenity;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ConflictException('An amenity with this name already exists');
+        }
+      }
+      throw error;
+    }
   }
 }

@@ -58,19 +58,24 @@ export class ApplicationDocumentsService {
     }
 
     const fileExtension = this.getFileExtension(mimeType);
-    const storageKey = `applications/${applicationId}/${documentType}/${Date.now()}_${fileName}`;
+    const sanitizedFileName = this.sanitizeFileName(fileName);
+    const storageKey = `applications/${applicationId}/${documentType}/${Date.now()}_${sanitizedFileName}`;
+
+    console.log(`Creating signed upload URL for bucket: application-documents, key: ${storageKey}`);
 
     const { data, error } = await this.supabase.storage
-      .from('basha-vara-uploads')
+      .from('application-documents')
       .createSignedUploadUrl(storageKey, {
         upsert: false,
       });
 
     if (error) {
+      console.error('Supabase signed URL creation error:', error);
       throw new BadRequestException(`Failed to create upload URL: ${error.message}`);
     }
 
-    const publicUrl = `${this.supabase.storage.from('basha-vara-uploads').getPublicUrl(storageKey).data.publicUrl}`;
+    const publicUrl = `${this.supabase.storage.from('application-documents').getPublicUrl(storageKey).data.publicUrl}`;
+    console.log('Created signed URL successfully, public URL:', publicUrl);
 
     return {
       uploadId: applicationId,
@@ -95,7 +100,7 @@ export class ApplicationDocumentsService {
       throw new ForbiddenException('You can only upload documents to your own applications');
     }
 
-    const publicUrl = this.supabase.storage.from('basha-vara-uploads').getPublicUrl(dto.storageKey).data.publicUrl;
+    const publicUrl = this.supabase.storage.from('application-documents').getPublicUrl(dto.storageKey).data.publicUrl;
 
     const document = await this.prisma.applicationDocument.create({
       data: {
@@ -107,6 +112,8 @@ export class ApplicationDocumentsService {
         mimeType: dto.mimeType,
       },
     });
+
+    console.log('Document created successfully:', document.id);
 
     return document;
   }
@@ -145,11 +152,13 @@ export class ApplicationDocumentsService {
       throw new ForbiddenException('You can only delete your own documents');
     }
 
-    const storageKey = document.fileUrl.split('/').slice(-1)[0];
+    const url = new URL(document.fileUrl);
+    const pathParts = url.pathname.split('/');
+    const storageKey = pathParts.slice(pathParts.indexOf('application-documents') + 1).join('/');
 
     if (storageKey) {
       const { error } = await this.supabase.storage
-        .from('basha-vara-uploads')
+        .from('application-documents')
         .remove([storageKey]);
 
       if (error) {
@@ -170,5 +179,18 @@ export class ApplicationDocumentsService {
       'application/pdf': 'pdf',
     };
     return extensions[mimeType] || 'bin';
+  }
+
+  private sanitizeFileName(fileName: string): string {
+    const extension = fileName.split('.').pop() || '';
+    const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
+
+    const sanitized = nameWithoutExt
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    return `${sanitized}.${extension}`;
   }
 }

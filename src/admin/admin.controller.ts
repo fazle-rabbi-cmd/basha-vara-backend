@@ -92,6 +92,17 @@ export class AdminController {
     return this.adminService.getPermissions();
   }
 
+  @Post('permissions')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Create a new permission (Super Admin only)' })
+  async createPermission(
+    @Body('name') name: string,
+    @Body('description') description?: string,
+    @Body('category') category?: string,
+  ) {
+    return this.adminService.createPermission(name, description, category);
+  }
+
   @Get('roles')
   @ApiOperation({ summary: 'List all roles with their permissions (Admin only)' })
   async getRoles() {

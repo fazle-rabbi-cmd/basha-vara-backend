@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 export class UploadsService {
   private supabase: SupabaseClient;
   private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-  private readonly ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  private readonly ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
   private readonly ALLOWED_PDF_TYPES = ['application/pdf'];
   private readonly MAX_PROPERTY_PHOTOS = 20;
 
@@ -185,8 +185,11 @@ export class UploadsService {
     const extensions: Record<string, string> = {
       'image/jpeg': 'jpg',
       'image/jpg': 'jpg',
+      'image/pjpeg': 'jpg',
       'image/png': 'png',
       'image/webp': 'webp',
+      'image/heic': 'heic',
+      'image/heif': 'heif',
       'application/pdf': 'pdf',
     };
     return extensions[mimeType] || 'bin';
