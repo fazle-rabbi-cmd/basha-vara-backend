@@ -7,7 +7,10 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter.js';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  logger.log('Starting Basha Vara Backend...');
+
   const app = await NestFactory.create(AppModule);
+  logger.log('NestJS application created successfully');
 
   // Cookie parser middleware for HttpOnly auth cookies
   app.use(cookieParser());
@@ -77,9 +80,13 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT ?? 4000;
+  logger.log(`Attempting to bind to port ${port} on 0.0.0.0...`);
   await app.listen(port, '0.0.0.0');
   logger.log(`🚀 Basha Vara Backend listening on http://0.0.0.0:${port}/${apiPrefix}`);
   logger.log(`📚 Swagger OpenAPI documentation available at http://0.0.0.0:${port}/api/docs`);
 }
 
-await bootstrap();
+bootstrap().catch((error) => {
+  console.error('Fatal error during bootstrap:', error);
+  process.exit(1);
+});
