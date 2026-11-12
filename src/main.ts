@@ -77,9 +77,9 @@ async function bootstrap() {
   });
 
   const port = process.env.PORT ?? 4000;
-  await app.listen(port);
-  logger.log(`🚀 Basha Vara Backend listening on http://localhost:${port}/${apiPrefix}`);
-  logger.log(`📚 Swagger OpenAPI documentation available at http://localhost:${port}/api/docs`);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`🚀 Basha Vara Backend listening on http://0.0.0.0:${port}/${apiPrefix}`);
+  logger.log(`📚 Swagger OpenAPI documentation available at http://0.0.0.0:${port}/api/docs`);
 }
 
 await bootstrap();
