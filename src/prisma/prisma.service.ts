@@ -11,10 +11,10 @@ export function buildPrismaDatabaseUrl(databaseUrl: string | undefined) {
 
   if (usesPgBouncer) {
     url.searchParams.set('pgbouncer', 'true');
-    url.searchParams.set('connection_limit', '1');
+    url.searchParams.set('connection_limit', '10');
   } else {
-    url.searchParams.set('connection_limit', url.searchParams.get('connection_limit') ?? '5');
-    url.searchParams.set('pool_timeout', url.searchParams.get('pool_timeout') ?? '10');
+    url.searchParams.set('connection_limit', url.searchParams.get('connection_limit') ?? '20');
+    url.searchParams.set('pool_timeout', url.searchParams.get('pool_timeout') ?? '30');
   }
 
   return url.toString();
