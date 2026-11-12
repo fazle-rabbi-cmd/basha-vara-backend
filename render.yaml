@@ -4,8 +4,8 @@ services:
     env: node
     region: oregon
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm run start:prod
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: node dist/main
     healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:
@@ -14,6 +14,8 @@ services:
       - key: PORT
         value: 10000
       - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
         sync: false
       - key: JWT_ACCESS_SECRET
         sync: false
