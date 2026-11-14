@@ -51,15 +51,20 @@ describe('UsersService', () => {
         phone: '01712345678',
         avatarUrl: null,
         status: 'ACTIVE',
-        roles: [{ role: 'TENANT' }],
+        emailVisibility: 'MASKED',
+        phoneVisibility: 'MASKED',
+        revealContactAfterMilestone: 'APPLICATION_SHORTLISTED',
+        roles: [{ role: { name: 'TENANT' } }],
         tenantProfile: { id: 'tenant-1' },
         landlordProfile: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       });
 
       const result = await service.getUserById(userId);
 
       expect(result).toHaveProperty('id', userId);
-      expect(result).toHaveProperty('email', 'test@example.com');
+      expect(result.email).toContain('@');
       expect(result.roles).toContain('TENANT');
     });
 

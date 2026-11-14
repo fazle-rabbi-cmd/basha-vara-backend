@@ -5,6 +5,10 @@ import { VisitsService } from './visits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateVisitRequestDto } from './dto/create-visit-request.dto.js';
 import { UpdateVisitStatusDto } from './dto/update-visit-status.dto.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
+import { NotificationEmailQueueService } from '../email/notification-email-queue.service.js';
+import { NotificationDigestService } from '../email/notification-digest.service.js';
+import { OtpService } from '../common/services/otp.service.js';
 import { vi } from 'vitest';
 
 describe('VisitsService', () => {
@@ -22,6 +26,33 @@ describe('VisitsService', () => {
     property: {
       findUnique: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
+    payment: {
+      create: vi.fn(),
+    },
+    escrow: {
+      create: vi.fn(),
+    },
+  };
+
+  const mockNotificationsService = {
+    create: vi.fn(),
+  };
+
+  const mockEmailQueueService = {
+    queueNotificationEmail: vi.fn(),
+  };
+
+  const mockDigestService = {
+    queueForDigest: vi.fn(),
+  };
+
+  const mockOtpService = {
+    generateOtp: vi.fn(),
+    verifyOtp: vi.fn(),
+    getOtpExpiryTime: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -31,6 +62,22 @@ describe('VisitsService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: NotificationsService,
+          useValue: mockNotificationsService,
+        },
+        {
+          provide: NotificationEmailQueueService,
+          useValue: mockEmailQueueService,
+        },
+        {
+          provide: NotificationDigestService,
+          useValue: mockDigestService,
+        },
+        {
+          provide: OtpService,
+          useValue: mockOtpService,
         },
       ],
     }).compile();
@@ -62,6 +109,14 @@ describe('VisitsService', () => {
         propertyId,
         tenantId,
         status: VisitStatus.PENDING,
+        requestedDate: new Date('2026-12-01'),
+        requestedTime: '10:00 AM',
+        visitType: 'IN_PERSON',
+        guestCount: 1,
+        contactPhone: null,
+        message: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
         property: { id: propertyId, title: 'Test Property' },
       });
 
@@ -159,7 +214,11 @@ describe('VisitsService', () => {
       });
       mockPrismaService.visitRequest.update.mockResolvedValue({
         id: visitId,
-        status: VisitStatus.ACCEPTED,
+        status: VisitStatus.APPROVED,
+        requestedDate: new Date('2026-12-01'),
+        requestedTime: '10:00 AM',
+        property: { title: 'Test Property' },
+        tenant: { id: 'tenant-1', fullName: 'Test Tenant' },
       });
 
       const result = await service.updateStatus(visitId, userId, ['LANDLORD'], dto);
@@ -181,6 +240,10 @@ describe('VisitsService', () => {
       mockPrismaService.visitRequest.update.mockResolvedValue({
         id: visitId,
         status: VisitStatus.CANCELLED,
+        requestedDate: new Date('2026-12-01'),
+        requestedTime: '10:00 AM',
+        property: { title: 'Test Property' },
+        tenant: { id: 'tenant-1', fullName: 'Test Tenant' },
       });
 
       const result = await service.updateStatus(visitId, userId, ['TENANT'], dto);
@@ -201,7 +264,11 @@ describe('VisitsService', () => {
       });
       mockPrismaService.visitRequest.update.mockResolvedValue({
         id: visitId,
-        status: VisitStatus.ACCEPTED,
+        status: VisitStatus.APPROVED,
+        requestedDate: new Date('2026-12-01'),
+        requestedTime: '10:00 AM',
+        property: { title: 'Test Property' },
+        tenant: { id: 'tenant-1', fullName: 'Test Tenant' },
       });
 
       const result = await service.updateStatus(visitId, userId, ['ADMIN'], dto);

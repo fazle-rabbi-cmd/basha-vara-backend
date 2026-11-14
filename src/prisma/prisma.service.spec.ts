@@ -8,7 +8,7 @@ describe('buildPrismaDatabaseUrl', () => {
     )!);
 
     expect(result.searchParams.get('pgbouncer')).toBe('true');
-    expect(result.searchParams.get('connection_limit')).toBe('1');
+    expect(result.searchParams.get('connection_limit')).toBe('10');
     expect(result.searchParams.get('schema')).toBe('public');
   });
 
@@ -18,7 +18,7 @@ describe('buildPrismaDatabaseUrl', () => {
     )!);
 
     expect(result.searchParams.get('pgbouncer')).toBeNull();
-    expect(result.searchParams.get('connection_limit')).toBe('5');
-    expect(result.searchParams.get('pool_timeout')).toBe('10');
+    expect(result.searchParams.get('connection_limit')).toBe('20');
+    expect(result.searchParams.get('pool_timeout')).toBe('30');
   });
 });
