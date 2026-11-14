@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
+import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter.js';
 
@@ -11,6 +13,15 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   logger.log('NestJS application created successfully');
+
+  // Enable gzip compression for faster responses
+  app.use(compression());
+
+  // Security headers
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }));
 
   // Cookie parser middleware for HttpOnly auth cookies
   app.use(cookieParser());

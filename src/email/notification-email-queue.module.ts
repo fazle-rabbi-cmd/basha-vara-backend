@@ -4,8 +4,11 @@ import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import { NOTIFICATION_EMAIL_QUEUE } from './notification-email.types.js';
 import { NotificationEmailQueueService } from './notification-email-queue.service.js';
+import { NotificationDigestService } from './notification-digest.service.js';
+import { PrismaModule } from '../prisma/prisma.module.js';
 
 @Module({
+  imports: [PrismaModule],
   providers: [
     {
       provide: NOTIFICATION_EMAIL_QUEUE,
@@ -19,7 +22,8 @@ import { NotificationEmailQueueService } from './notification-email-queue.servic
       },
     },
     NotificationEmailQueueService,
+    NotificationDigestService,
   ],
-  exports: [NotificationEmailQueueService],
+  exports: [NotificationEmailQueueService, NotificationDigestService],
 })
 export class NotificationEmailQueueModule {}

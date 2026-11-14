@@ -11,12 +11,15 @@ import { UsersService } from './users.service.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { PermissionsGuard } from '../common/guards/permissions.guard.js';
+import { ContactInfoGuard } from '../common/guards/contact-info.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { RequirePermissions } from '../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UpdateTenantProfileDto } from './dto/update-tenant-profile.dto.js';
 import { UpdateLandlordProfileDto } from './dto/update-landlord-profile.dto.js';
+import { UpdateContactPrivacyDto } from './dto/update-contact-privacy.dto.js';
+import { ProfileCompletionService } from './profile-completion.service.js';
 import { SystemPermission } from '@prisma/client';
 
 @ApiTags('Users')
@@ -24,21 +27,25 @@ import { SystemPermission } from '@prisma/client';
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly profileCompletionService: ProfileCompletionService,
+  ) {}
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile and role details' })
   @ApiResponse({ status: 200, description: 'User profile retrieved successfully' })
   async getMyProfile(@CurrentUser('id') userId: string) {
-    return this.usersService.getUserById(userId);
+    return this.usersService.getUserById(userId, userId);
   }
 
   @Get(':id')
+  @UseGuards(ContactInfoGuard)
   @RequirePermissions(SystemPermission.USER_READ_ANY)
   @ApiOperation({ summary: 'Get user by ID (for landlords to view tenant info)' })
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
-  async getUserById(@Param('id') id: string) {
-    return this.usersService.getUserById(id);
+  async getUserById(@Param('id') id: string, @CurrentUser('id') requestingUserId: string) {
+    return this.usersService.getUserById(id, requestingUserId);
   }
 
   @Patch('me')
@@ -74,5 +81,23 @@ export class UsersController {
     @Body() dto: UpdateLandlordProfileDto,
   ) {
     return this.usersService.updateLandlordProfile(userId, dto);
+  }
+
+  @Patch('me/contact-privacy')
+  @RequirePermissions(SystemPermission.USER_UPDATE_OWN)
+  @ApiOperation({ summary: 'Update contact privacy settings' })
+  @ApiResponse({ status: 200, description: 'Contact privacy settings updated successfully' })
+  async updateContactPrivacy(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateContactPrivacyDto,
+  ) {
+    return this.usersService.updateContactPrivacy(userId, dto);
+  }
+
+  @Get('me/profile-completion')
+  @ApiOperation({ summary: 'Get profile completion percentage' })
+  @ApiResponse({ status: 200, description: 'Profile completion percentage retrieved successfully' })
+  async getProfileCompletion(@CurrentUser('id') userId: string) {
+    return this.profileCompletionService.calculateProfileCompletion(userId);
   }
 }

@@ -13,6 +13,13 @@ import { AdminModule } from './admin/admin.module.js';
 import { UploadsModule } from './uploads/uploads.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { NotificationEmailQueueModule } from './email/notification-email-queue.module.js';
+import { MessagesModule } from './messages/messages.module.js';
+import { PaymentsModule } from './payments/payments.module.js';
+import { LeaseAgreementsModule } from './lease-agreements/lease-agreements.module.js';
+import { EscrowModule } from './escrow/escrow.module.js';
+import { PoliceVerificationModule } from './police-verification/police-verification.module.js';
+import { RentLedgerModule } from './rent-ledger/rent-ledger.module.js';
+import { PushNotificationsModule } from './push-notifications/push-notifications.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 
@@ -35,6 +42,13 @@ import { AppService } from './app.service.js';
     UploadsModule,
     NotificationsModule,
     NotificationEmailQueueModule,
+    MessagesModule,
+    PaymentsModule,
+    LeaseAgreementsModule,
+    EscrowModule,
+    PoliceVerificationModule,
+    RentLedgerModule,
+    PushNotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

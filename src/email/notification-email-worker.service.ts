@@ -187,6 +187,47 @@ export class NotificationEmailWorkerService implements OnModuleInit, OnModuleDes
           ].join('\n'),
         };
 
+      case 'DIGEST_SUMMARY':
+        const visitCount = data.items?.filter(i => i.type === 'visit').length || 0;
+        const appCount = data.items?.filter(i => i.type === 'application').length || 0;
+        const totalCount = visitCount + appCount;
+        
+        let digestText = [
+          `Hello ${userName},`,
+          '',
+          `You have ${totalCount} new notification${totalCount > 1 ? 's' : ''} on Basha Vara:`,
+          '',
+        ];
+        
+        if (visitCount > 0) {
+          digestText.push(`${visitCount} new visit request${visitCount > 1 ? 's' : ''}:`);
+          data.items?.filter(i => i.type === 'visit').forEach(item => {
+            digestText.push(`  • ${item.propertyTitle} - ${item.tenantName} (${item.visitDate} ${item.visitTime})`);
+          });
+          digestText.push('');
+        }
+        
+        if (appCount > 0) {
+          digestText.push(`${appCount} new application${appCount > 1 ? 's' : ''}:`);
+          data.items?.filter(i => i.type === 'application').forEach(item => {
+            digestText.push(`  • ${item.propertyTitle} - ${item.tenantName}`);
+          });
+          digestText.push('');
+        }
+        
+        digestText.push(
+          `View all notifications in your dashboard.`,
+          `${frontendUrl}/notifications`,
+          '',
+          'Best regards,',
+          'Basha Vara Team',
+        );
+        
+        return {
+          subject: `You have ${totalCount} new notification${totalCount > 1 ? 's' : ''} on Basha Vara`,
+          text: digestText.join('\n'),
+        };
+
       default:
         return {
           subject: 'Basha Vara Notification',

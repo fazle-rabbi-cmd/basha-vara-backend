@@ -9,28 +9,45 @@ datasource db {
 }
 
 model User {
-  id                String                @id @default(uuid()) @db.Uuid
-  email             String                @unique
-  phone             String?
-  passwordHash      String?
-  fullName          String
-  avatarUrl         String?
-  status            UserStatus            @default(ACTIVE)
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-  authActionTokens  AuthActionToken[]
-  favourites        Favourite[]           @relation("TenantFavourites")
-  landlordProfile   LandlordProfile?
-  properties        Property[]            @relation("LandlordProperties")
-  applicationsMade  RentalApplication[]   @relation("TenantApplications")
-  tenantProfile     TenantProfile?
-  roles             UserRole[]
-  visitRequestsMade VisitRequest[]        @relation("TenantVisits")
-  notifications     Notification[]
-  applicationProfile ApplicationProfile?
-  userDocuments     UserDocument[]
-  customAmenities   Amenity[]          @relation("CustomAmenities")
+  id                          String                @id @default(uuid()) @db.Uuid
+  email                       String                @unique
+  phone                       String?
+  passwordHash                String?
+  fullName                    String
+  avatarUrl                   String?
+  status                      UserStatus            @default(ACTIVE)
+  emailVisibility             ContactVisibility     @default(MASKED)
+  phoneVisibility             ContactVisibility     @default(MASKED)
+  revealContactAfterMilestone ContactMilestone      @default(APPLICATION_SHORTLISTED)
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  authActionTokens            AuthActionToken[]
+  favourites                  Favourite[]           @relation("TenantFavourites")
+  landlordProfile             LandlordProfile?
+  properties                  Property[]            @relation("LandlordProperties")
+  applicationsMade            RentalApplication[]   @relation("TenantApplications")
+  tenantProfile               TenantProfile?
+  roles                       UserRole[]
+  visitRequestsMade           VisitRequest[]        @relation("TenantVisits")
+  notifications               Notification[]
+  applicationProfile          ApplicationProfile?
+  userDocuments               UserDocument[]
+  customAmenities             Amenity[]              @relation("CustomAmenities")
+  sentMessages                Message[]             @relation("SentMessages")
+  receivedMessages            Message[]             @relation("ReceivedMessages")
+  landlordLeases              LeaseAgreement[]      @relation("LandlordLeases")
+  tenantLeases                LeaseAgreement[]      @relation("TenantLeases")
+  policeVerifications PoliceVerification[]  @relation("TenantVerifications")
+  policeVerificationsAsLandlord PoliceVerification[] @relation("LandlordVerifications")
+  tenantRentPayments          RentPayment[]          @relation("TenantRentPayments")
+  landlordRentPayments        RentPayment[]          @relation("LandlordRentPayments")
+  tenantUtilityCharges        UtilityCharge[]        @relation("TenantUtilityCharges")
+  landlordUtilityCharges      UtilityCharge[]        @relation("LandlordUtilityCharges")
+  deviceTokens                DeviceToken[]
 
+  @@index([email])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
   @@map("users")
 }
 
@@ -92,8 +109,18 @@ model TenantProfile {
   id                     String         @id @default(uuid()) @db.Uuid
   userId                 String         @unique @db.Uuid
   occupation             String?
+  maritalStatus          String?        // 'SINGLE', 'MARRIED', 'DIVORCED', 'WIDOWED'
+  householdSize          Int?          // Total family members
+  hasChildren            Boolean        @default(false)
+  childrenCount          Int?          // Number of children
+  youngestChildAge       Int?          // Age of youngest child
+  oldestChildAge         Int?          // Age of oldest child
+  hasPets                Boolean        @default(false)
+  petType                String?        // 'DOG', 'CAT', 'BIRD', 'OTHER'
+  smokingStatus          String?        // 'SMOKER', 'NON_SMOKER', 'OCCASIONAL'
+  returnTimePreference   String?        // e.g., '23:00' preferred return time
+  gender                 String?        // 'MALE', 'FEMALE', 'OTHER'
   moveInDatePreference   DateTime?
-  householdSize          Int?
   preferredLocations     String[]       @default([])
   budgetMin              Decimal?       @db.Decimal(12, 2)
   budgetMax              Decimal?       @db.Decimal(12, 2)
@@ -122,42 +149,74 @@ model LandlordProfile {
 }
 
 model Property {
-  id             String              @id @default(uuid()) @db.Uuid
-  landlordId     String              @db.Uuid
-  title          String
-  description    String
-  propertyType   PropertyType
-  rentAmount     Decimal             @db.Decimal(12, 2)
-  depositAmount  Decimal?            @db.Decimal(12, 2)
-  bedrooms       Int
-  bathrooms      Int
-  areaSqft       Int?
-  floor          Int?
-  totalFloors    Int?
-  addressLine    String
-  area           String
-  city           String              @default("Dhaka")
-  district       String              @default("Dhaka")
-  availableFrom  DateTime
-  status         PropertyStatus      @default(DRAFT)
-  viewCount      Int                 @default(0)
-  favouriteCount Int                 @default(0)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  lat            Float?
-  lng            Float?
-  favourites     Favourite[]
-  landlord       User                @relation("LandlordProperties", fields: [landlordId], references: [id])
-  amenities      PropertyAmenity[]
-  photos         PropertyPhoto[]
-  applications   RentalApplication[]
-  visits         VisitRequest[]
+  id                  String              @id @default(uuid()) @db.Uuid
+  landlordId          String              @db.Uuid
+  title               String
+  description         String
+  propertyType        PropertyType
+  rentAmount          Decimal             @db.Decimal(12, 2)
+  depositAmount       Decimal?            @db.Decimal(12, 2)
+  bedrooms            Int
+  bathrooms           Int
+  areaSqft            Int?
+  floor               Int?
+  totalFloors         Int?
+  addressLine         String
+  area                String
+  city                String              @default("Dhaka")
+  district            String              @default("Dhaka")
+  availableFrom       DateTime
+  status              PropertyStatus      @default(DRAFT)
+  viewCount           Int                 @default(0)
+  favouriteCount      Int                 @default(0)
+  lockedByVisitId     String?             @db.Uuid
+  lockedUntil         DateTime?
+  
+  // Landlord Preferences
+  allowedOccupation   String?             // 'STUDENT', 'WORKING', 'BOTH', 'ANY'
+  allowedMaritalStatus String?            // 'SINGLE', 'MARRIED', 'DIVORCED', 'ANY'
+  allowedFamilyType   String?             // 'FAMILY', 'BACHELOR', 'SUBLET', 'ANY'
+  maxFamilySize       Int?                // Maximum family members allowed
+  maxOccupancy        Int?                // Maximum total occupants (including children)
+  minChildrenAge      Int?                // Minimum age of youngest child allowed (null = no restriction)
+  maxChildrenAge      Int?                // Maximum age of oldest child allowed (null = no restriction)
+  allowInfants        Boolean             @default(true) // Allow children under 2
+  allowToddlers       Boolean             @default(true) // Allow children 2-5
+  allowSchoolAge      Boolean             @default(true) // Allow children 6-12
+  allowTeens          Boolean             @default(true) // Allow children 13-17
+  allowPets           Boolean             @default(false)
+  allowSmoking         Boolean             @default(false)
+  strictReturnTime    Boolean             @default(false) // Enforce return time
+  minReturnTime       String?             // e.g., '23:00' for 11 PM
+  quietHoursStart     String?             // e.g., '22:00' for 10 PM
+  quietHoursEnd       String?             // e.g., '06:00' for 6 AM
+  preferredGender     String?             // 'MALE', 'FEMALE', 'ANY'
+  
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  lat                 Float?
+  lng                 Float?
+  favourites          Favourite[]
+  landlord            User                @relation("LandlordProperties", fields: [landlordId], references: [id])
+  amenities           PropertyAmenity[]
+  photos              PropertyPhoto[]
+  applications        RentalApplication[]
+  visits              VisitRequest[]
+  messages            Message[]
+  leases              LeaseAgreement[]      @relation("PropertyLeases")
+  policeVerifications PoliceVerification[]
+  rentPayments        RentPayment[]
+  utilityCharges      UtilityCharge[]
 
   @@index([landlordId])
   @@index([status])
   @@index([area])
   @@index([propertyType])
   @@index([rentAmount])
+  @@index([createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([landlordId, status])
+  @@index([lockedByVisitId])
   @@map("properties")
 }
 
@@ -221,20 +280,29 @@ model Favourite {
 }
 
 model VisitRequest {
-  id            String      @id @default(uuid()) @db.Uuid
-  propertyId    String      @db.Uuid
-  tenantId      String      @db.Uuid
-  requestedDate DateTime
-  requestedTime String
-  message       String?
-  visitType     VisitType   @default(IN_PERSON)
-  guestCount    Int         @default(1)
-  contactPhone  String?
-  status        VisitStatus @default(PENDING)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  property      Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenant        User        @relation("TenantVisits", fields: [tenantId], references: [id], onDelete: Cascade)
+  id                    String      @id @default(uuid()) @db.Uuid
+  propertyId            String      @db.Uuid
+  tenantId              String      @db.Uuid
+  requestedDate         DateTime
+  requestedTime         String
+  message               String?
+  visitType             VisitType   @default(IN_PERSON)
+  guestCount            Int         @default(1)
+  contactPhone          String?
+  status                VisitStatus @default(PENDING)
+  tokenHoldAmount       Decimal?    @db.Decimal(12, 2)
+  tokenHoldExpiresAt    DateTime?
+  landlordOtp           String?
+  tenantOtp             String?
+  landlordOtpVerifiedAt DateTime?
+  tenantOtpVerifiedAt   DateTime?
+  visitVerifiedAt       DateTime?
+  checkInLocation       Json?
+  checkInPhotoUrl       String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  property              Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant                User        @relation("TenantVisits", fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([propertyId])
   @@index([tenantId])
@@ -243,18 +311,21 @@ model VisitRequest {
 }
 
 model RentalApplication {
-  id           String            @id @default(uuid()) @db.Uuid
-  propertyId   String            @db.Uuid
-  tenantId     String            @db.Uuid
-  coverNote    String?
-  moveInDate   DateTime?
-  proposedRent Decimal?          @db.Decimal(12, 2)
-  status       ApplicationStatus @default(SUBMITTED)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  property     Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenant       User              @relation("TenantApplications", fields: [tenantId], references: [id], onDelete: Cascade)
-  documents    ApplicationDocument[]
+  id                String            @id @default(uuid()) @db.Uuid
+  propertyId        String            @db.Uuid
+  tenantId          String            @db.Uuid
+  verifiedVisitId   String?           @db.Uuid
+  coverNote         String?
+  moveInDate        DateTime?
+  proposedRent      Decimal?          @db.Decimal(12, 2)
+  status            ApplicationStatus @default(SUBMITTED)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  property          Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant            User              @relation("TenantApplications", fields: [tenantId], references: [id], onDelete: Cascade)
+  documents         ApplicationDocument[]
+  payments          Payment[]
+  leaseAgreement    LeaseAgreement?
 
   @@index([propertyId])
   @@index([tenantId])
@@ -293,7 +364,9 @@ model Notification {
 
   @@index([userId])
   @@index([isRead])
-  @@index([createdAt])
+  @@index([createdAt(sort: Desc)])
+  @@index([userId, isRead])
+  @@index([userId, createdAt(sort: Desc)])
   @@map("notifications")
 }
 
@@ -396,6 +469,8 @@ enum SystemPermission {
   APPLICATION_STATUS_UPDATE_ANY
   USER_READ_OWN
   USER_READ_ANY
+  USER_READ_CONTACT
+  USER_REVEAL_CONTACT
   USER_UPDATE_OWN
   USER_UPDATE_ANY
   USER_DELETE_OWN
@@ -422,7 +497,65 @@ enum NotificationType {
   PROPERTY_PUBLISHED
   PROPERTY_RENTED
   PROPERTY_PAUSED
+  CONTACT_REVEALED
+  ESCROW_RELEASED
+  ESCROW_REFUNDED
+  ESCROW_DISPUTED
+  ESCROW_RESOLVED
   SYSTEM
+}
+
+enum ContactVisibility {
+  PLATFORM_ONLY
+  MASKED
+  FULL
+}
+
+enum ContactMilestone {
+  NEVER
+  VISIT_SCHEDULED
+  APPLICATION_SUBMITTED
+  APPLICATION_SHORTLISTED
+  APPLICATION_ACCEPTED
+  PAYMENT_INITIATED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+  SYSTEM
+}
+
+enum PaymentType {
+  BOOKING_DEPOSIT
+  SECURITY_DEPOSIT
+  FIRST_MONTH_RENT
+  PROCESSING_FEE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum EscrowStatus {
+  NOT_APPLICABLE
+  HELD
+  RELEASED
+  REFUNDED
+  DISPUTED
+  PARTIALLY_RELEASED
+}
+
+enum LeaseStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  SIGNED
+  ACTIVE
+  TERMINATED
 }
 
 model ApplicationProfile {
@@ -474,4 +607,186 @@ model UserDocument {
   @@index([userId])
   @@index([userId, documentType])
   @@map("user_documents")
+}
+
+model PoliceVerification {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  propertyId      String   @db.Uuid
+  applicationId   String?  @db.Uuid
+  landlordId      String   @db.Uuid
+  status          String   @default("PENDING") // PENDING, GENERATED, SUBMITTED, VERIFIED
+  formData        Json     // Store form data for PDF generation
+  pdfUrl          String?
+  submittedAt     DateTime?
+  verifiedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          User     @relation("TenantVerifications", fields: [tenantId], references: [id], onDelete: Cascade)
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  landlord        User     @relation("LandlordVerifications", fields: [landlordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([propertyId])
+  @@index([landlordId])
+  @@index([status])
+  @@map("police_verifications")
+}
+
+model RentPayment {
+  id              String   @id @default(uuid()) @db.Uuid
+  propertyId      String   @db.Uuid
+  tenantId        String   @db.Uuid
+  landlordId      String   @db.Uuid
+  amount          Decimal  @db.Decimal(12, 2)
+  paymentDate     DateTime
+  dueDate         DateTime
+  status          String   @default("PENDING") // PENDING, PAID, OVERDUE, CANCELLED
+  paymentMethod   String?
+  transactionId   String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant          User     @relation("TenantRentPayments", fields: [tenantId], references: [id], onDelete: Cascade)
+  landlord        User     @relation("LandlordRentPayments", fields: [landlordId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([landlordId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("rent_payments")
+}
+
+model UtilityCharge {
+  id              String   @id @default(uuid()) @db.Uuid
+  propertyId      String   @db.Uuid
+  tenantId        String   @db.Uuid
+  landlordId      String   @db.Uuid
+  chargeType      String   // ELECTRICITY, GAS, WATER, INTERNET, OTHER
+  amount          Decimal  @db.Decimal(12, 2)
+  billingMonth    String   // Format: YYYY-MM
+  dueDate         DateTime
+  status          String   @default("PENDING") // PENDING, PAID, OVERDUE
+  paymentMethod   String?
+  transactionId   String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant          User     @relation("TenantUtilityCharges", fields: [tenantId], references: [id], onDelete: Cascade)
+  landlord        User     @relation("LandlordUtilityCharges", fields: [landlordId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([landlordId])
+  @@index([status])
+  @@index([billingMonth])
+  @@map("utility_charges")
+}
+
+model DeviceToken {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  token       String   @unique
+  deviceType  String   // 'web', 'android', 'ios'
+  deviceName  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([deviceType])
+  @@map("device_tokens")
+}
+
+model Message {
+  id          String      @id @default(uuid()) @db.Uuid
+  senderId    String      @db.Uuid
+  receiverId  String      @db.Uuid
+  propertyId  String?     @db.Uuid
+  content     String
+  messageType MessageType @default(TEXT)
+  isRead      Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  sender      User        @relation("SentMessages", fields: [senderId], references: [id])
+  receiver    User        @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  property    Property?   @relation(fields: [propertyId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([propertyId])
+  @@index([createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+model Payment {
+  id              String       @id @default(uuid()) @db.Uuid
+  applicationId   String?      @db.Uuid
+  amount          Decimal      @db.Decimal(12, 2)
+  paymentType     PaymentType
+  status          PaymentStatus @default(PENDING)
+  transactionId   String?      @unique
+  paidAt          DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Escrow fields
+  escrowStatus    EscrowStatus @default(NOT_APPLICABLE)
+  escrowReleasedAt DateTime?
+  escrowRefundedAt DateTime?
+  escrowDisputedAt DateTime?
+  platformFee     Decimal?     @db.Decimal(12, 2)
+  landlordAmount  Decimal?     @db.Decimal(12, 2)
+  tenantAmount    Decimal?     @db.Decimal(12, 2)
+  releaseReason   String?
+  refundReason    String?
+
+  application     RentalApplication? @relation(fields: [applicationId], references: [id])
+
+  @@index([applicationId])
+  @@index([status])
+  @@index([escrowStatus])
+  @@map("payments")
+}
+
+model LeaseAgreement {
+  id              String      @id @default(uuid()) @db.Uuid
+  applicationId   String      @unique @db.Uuid
+  landlordId      String      @db.Uuid
+  tenantId        String      @db.Uuid
+  propertyId      String      @db.Uuid
+  startDate       DateTime
+  endDate         DateTime
+  rentAmount      Decimal     @db.Decimal(12, 2)
+  depositAmount   Decimal     @db.Decimal(12, 2)
+  terms           Json
+  status          LeaseStatus @default(DRAFT)
+  landlordSigned  Boolean     @default(false)
+  tenantSigned    Boolean     @default(false)
+  signedAt        DateTime?
+  pdfUrl          String?
+  landlordSignatureData String?
+  tenantSignatureData   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  application     RentalApplication @relation(fields: [applicationId], references: [id])
+  landlord        User        @relation("LandlordLeases", fields: [landlordId], references: [id])
+  tenant          User        @relation("TenantLeases", fields: [tenantId], references: [id])
+  property        Property    @relation("PropertyLeases", fields: [propertyId], references: [id])
+
+  @@index([applicationId])
+  @@index([landlordId])
+  @@index([tenantId])
+  @@index([status])
+  @@map("lease_agreements")
 }

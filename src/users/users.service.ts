@@ -3,13 +3,40 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UpdateTenantProfileDto } from './dto/update-tenant-profile.dto.js';
 import { UpdateLandlordProfileDto } from './dto/update-landlord-profile.dto.js';
-import { Prisma } from '@prisma/client';
+import { UpdateContactPrivacyDto } from './dto/update-contact-privacy.dto.js';
+import { Prisma, ContactVisibility } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  async getUserById(userId: string) {
+  private maskEmail(email: string): string {
+    const [local, domain] = email.split('@');
+    if (local.length <= 2) {
+      return `${local[0]}***@${domain}`;
+    }
+    return `${local[0]}${'*'.repeat(local.length - 2)}${local[local.length - 1]}@${domain}`;
+  }
+
+  private maskPhone(phone: string): string {
+    if (!phone) return phone;
+    if (phone.length <= 4) return phone;
+    return phone.replace(/(\+\d{3})\d+(\d{4})$/, '$1****$2');
+  }
+
+  private getContactVisibilitySetting(
+    visibility: ContactVisibility,
+    defaultValue: string,
+  ): string {
+    if (visibility === 'FULL') return defaultValue;
+    if (visibility === 'MASKED') {
+      if (defaultValue.includes('@')) return this.maskEmail(defaultValue);
+      return this.maskPhone(defaultValue);
+    }
+    return this.maskEmail(defaultValue.includes('@') ? defaultValue : this.maskPhone(defaultValue));
+  }
+
+  async getUserById(userId: string, requestingUserId?: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -27,13 +54,28 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    const isOwnProfile = requestingUserId === userId;
+
+    const email = isOwnProfile
+      ? user.email
+      : this.getContactVisibilitySetting(user.emailVisibility, user.email);
+
+    const phone = user.phone
+      ? isOwnProfile
+        ? user.phone
+        : this.getContactVisibilitySetting(user.phoneVisibility, user.phone)
+      : null;
+
     return {
       id: user.id,
-      email: user.email,
+      email,
       fullName: user.fullName,
-      phone: user.phone,
+      phone,
       avatarUrl: user.avatarUrl,
       status: user.status,
+      emailVisibility: user.emailVisibility,
+      phoneVisibility: user.phoneVisibility,
+      revealContactAfterMilestone: user.revealContactAfterMilestone,
       roles: user.roles.map((r) => r.role.name),
       tenantProfile: user.tenantProfile,
       landlordProfile: user.landlordProfile,
@@ -120,5 +162,23 @@ export class UsersService {
     });
 
     return landlordProfile;
+  }
+
+  async updateContactPrivacy(userId: string, dto: UpdateContactPrivacyDto) {
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.emailVisibility !== undefined && { emailVisibility: dto.emailVisibility }),
+        ...(dto.phoneVisibility !== undefined && { phoneVisibility: dto.phoneVisibility }),
+        ...(dto.revealContactAfterMilestone !== undefined && { revealContactAfterMilestone: dto.revealContactAfterMilestone }),
+      },
+      select: {
+        emailVisibility: true,
+        phoneVisibility: true,
+        revealContactAfterMilestone: true,
+      },
+    });
+
+    return updated;
   }
 }

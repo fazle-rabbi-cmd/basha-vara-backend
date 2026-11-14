@@ -1,13 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationType } from '@prisma/client';
+import { PushNotificationsService } from '../push-notifications/push-notifications.service.js';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pushNotificationsService: PushNotificationsService,
+  ) {}
 
   async create(userId: string, type: NotificationType, title: string, message: string, data?: any) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: {
         userId,
         type,
@@ -16,6 +20,21 @@ export class NotificationsService {
         data: data || {},
       },
     });
+
+    // Send push notification
+    try {
+      await this.pushNotificationsService.sendPushNotification({
+        userId,
+        title,
+        body: message,
+        data: data ? JSON.stringify(data) : undefined,
+      });
+    } catch (error) {
+      // Log error but don't fail the notification creation
+      console.error('Failed to send push notification:', error);
+    }
+
+    return notification;
   }
 
   async getUserNotifications(userId: string, unreadOnly = false) {
