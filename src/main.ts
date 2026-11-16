@@ -2,10 +2,11 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
-import compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter.js';
+
+const compression = require('compression');
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
