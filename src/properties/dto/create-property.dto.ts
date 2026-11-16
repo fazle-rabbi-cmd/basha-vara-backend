@@ -13,6 +13,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   Max,
   Min,
   ValidateIf,
@@ -163,4 +164,106 @@ export class CreatePropertyDto {
   @IsArray()
   @IsString({ each: true })
   amenityIds?: string[];
+
+  // Landlord Tenant Preferences
+  @ApiPropertyOptional({ example: 'STUDENT', enum: ['STUDENT', 'WORKING', 'BOTH', 'ANY'], description: 'Allowed occupation type' })
+  @IsOptional()
+  @IsString()
+  allowedOccupation?: string;
+
+  @ApiPropertyOptional({ example: 'SINGLE', enum: ['SINGLE', 'MARRIED', 'DIVORCED', 'ANY'], description: 'Allowed marital status' })
+  @IsOptional()
+  @IsString()
+  allowedMaritalStatus?: string;
+
+  @ApiPropertyOptional({ example: 'FAMILY', enum: ['FAMILY', 'BACHELOR', 'SUBLET', 'ANY'], description: 'Allowed family type' })
+  @IsOptional()
+  @IsString()
+  allowedFamilyType?: string;
+
+  @ApiPropertyOptional({ example: 4, minimum: 1, description: 'Maximum family size allowed' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxFamilySize?: number;
+
+  @ApiPropertyOptional({ example: 5, minimum: 1, description: 'Maximum total occupants (including children)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxOccupancy?: number;
+
+  @ApiPropertyOptional({ example: 2, minimum: 0, description: 'Minimum age of youngest child allowed' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minChildrenAge?: number;
+
+  @ApiPropertyOptional({ example: 17, minimum: 0, description: 'Maximum age of oldest child allowed' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxChildrenAge?: number;
+
+  @ApiPropertyOptional({ example: true, description: 'Allow children under 2 (infants)' })
+  @IsOptional()
+  @IsBoolean()
+  allowInfants?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Allow children 2-5 (toddlers)' })
+  @IsOptional()
+  @IsBoolean()
+  allowToddlers?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Allow children 6-12 (school age)' })
+  @IsOptional()
+  @IsBoolean()
+  allowSchoolAge?: boolean;
+
+  @ApiPropertyOptional({ example: true, description: 'Allow children 13-17 (teens)' })
+  @IsOptional()
+  @IsBoolean()
+  allowTeens?: boolean;
+
+  @ApiPropertyOptional({ example: false, description: 'Allow pets' })
+  @IsOptional()
+  @IsBoolean()
+  allowPets?: boolean;
+
+  @ApiPropertyOptional({ example: false, description: 'Allow smoking' })
+  @IsOptional()
+  @IsBoolean()
+  allowSmoking?: boolean;
+
+  @ApiPropertyOptional({ example: false, description: 'Enforce strict return time' })
+  @IsOptional()
+  @IsBoolean()
+  strictReturnTime?: boolean;
+
+  @ApiPropertyOptional({ example: '23:00', description: 'Minimum return time (HH:MM)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'minReturnTime must be in HH:MM format' })
+  minReturnTime?: string;
+
+  @ApiPropertyOptional({ example: '22:00', description: 'Quiet hours start time (HH:MM)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'quietHoursStart must be in HH:MM format' })
+  quietHoursStart?: string;
+
+  @ApiPropertyOptional({ example: '06:00', description: 'Quiet hours end time (HH:MM)' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'quietHoursEnd must be in HH:MM format' })
+  quietHoursEnd?: string;
+
+  @ApiPropertyOptional({ example: 'MALE', enum: ['MALE', 'FEMALE', 'ANY'], description: 'Preferred gender' })
+  @IsOptional()
+  @IsString()
+  preferredGender?: string;
 }

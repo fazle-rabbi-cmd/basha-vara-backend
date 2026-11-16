@@ -10,6 +10,7 @@ import { CreateRentalApplicationDto } from './dto/create-application.dto.js';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationEmailQueueService } from '../email/notification-email-queue.service.js';
+import { NotificationDigestService } from '../email/notification-digest.service.js';
 
 @Injectable()
 export class ApplicationsService {
@@ -17,6 +18,7 @@ export class ApplicationsService {
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private emailQueueService: NotificationEmailQueueService,
+    private digestService: NotificationDigestService,
   ) {}
 
   async create(propertyId: string, tenantId: string, dto: CreateRentalApplicationDto) {
@@ -56,10 +58,43 @@ export class ApplicationsService {
       throw new BadRequestException('You already have an active application submitted for this property');
     }
 
+    // Require verified visit for application submission
+    if (dto.verifiedVisitId) {
+      const verifiedVisit = await this.prisma.visitRequest.findUnique({
+        where: { id: dto.verifiedVisitId },
+      });
+
+      if (!verifiedVisit) {
+        throw new NotFoundException('Verified visit not found');
+      }
+
+      if (verifiedVisit.tenantId !== tenantId) {
+        throw new BadRequestException('You can only use your own verified visits');
+      }
+
+      if (verifiedVisit.propertyId !== propertyId) {
+        throw new BadRequestException('Verified visit must be for this property');
+      }
+
+      if (verifiedVisit.status !== VisitStatus.COMPLETED || !verifiedVisit.visitVerifiedAt) {
+        throw new BadRequestException('Visit must be completed and verified before application');
+      }
+
+      // Check if this visit is already used for another application
+      const existingAppWithVisit = await this.prisma.rentalApplication.findFirst({
+        where: { verifiedVisitId: dto.verifiedVisitId },
+      });
+
+      if (existingAppWithVisit) {
+        throw new BadRequestException('This verified visit is already linked to another application');
+      }
+    }
+
     const application = await this.prisma.rentalApplication.create({
       data: {
         propertyId,
         tenantId,
+        verifiedVisitId: dto.verifiedVisitId || null,
         coverNote: dto.coverNote?.trim() || null,
         moveInDate: dto.moveInDate,
         proposedRent: dto.proposedRent !== undefined ? new Prisma.Decimal(dto.proposedRent) : null,
@@ -90,12 +125,12 @@ export class ApplicationsService {
       { applicationId: application.id, propertyId, tenantId },
     );
 
-    // Send email to landlord
+    // Send email to landlord (batched via digest)
     const tenant = await this.prisma.user.findUnique({
       where: { id: tenantId },
       select: { fullName: true },
     });
-    await this.emailQueueService.queueNotificationEmail(
+    await this.digestService.queueForDigest(
       property.landlordId,
       'NEW_APPLICATION',
       {

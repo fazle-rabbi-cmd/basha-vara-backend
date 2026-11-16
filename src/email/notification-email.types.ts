@@ -5,7 +5,8 @@ export type NotificationEmailPurpose =
   | 'NEW_APPLICATION'
   | 'APPLICATION_SELECTED'
   | 'VISIT_ACCEPTED'
-  | 'VISIT_CANCELLED';
+  | 'VISIT_CANCELLED'
+  | 'DIGEST_SUMMARY'; // New: Batched digest emails
 
 export interface NotificationEmailJob {
   userId: string;
@@ -19,5 +20,16 @@ export interface NotificationEmailJob {
     propertyId?: string;
     visitId?: string;
     applicationId?: string;
+    // Digest fields
+    count?: number;
+    items?: Array<{
+      type: string;
+      propertyTitle: string;
+      tenantName?: string;
+      visitDate?: string;
+      visitTime?: string;
+      applicationId?: string;
+      visitId?: string;
+    }>;
   };
 }

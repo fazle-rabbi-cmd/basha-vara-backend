@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDate, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsDate, IsNumber, IsOptional, IsString, Min, IsUUID } from 'class-validator';
 
 export class CreateRentalApplicationDto {
   @ApiPropertyOptional({
@@ -29,4 +29,12 @@ export class CreateRentalApplicationDto {
   @IsNumber()
   @Min(0)
   proposedRent?: number;
+
+  @ApiPropertyOptional({
+    example: 'uuid-of-verified-visit',
+    description: 'ID of verified visit to link with application',
+  })
+  @IsOptional()
+  @IsUUID()
+  verifiedVisitId?: string;
 }

@@ -41,6 +41,19 @@ export class PropertiesController {
     return this.propertiesService.findAll(query);
   }
 
+  @Get('compatible')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('TENANT')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get properties compatible with tenant profile' })
+  @ApiResponse({ status: 200, description: 'Paginated list of compatible properties' })
+  async getCompatibleProperties(
+    @CurrentUser('id') tenantId: string,
+    @Query() query: PropertyQueryDto,
+  ) {
+    return this.propertiesService.findCompatibleProperties(tenantId, query);
+  }
+
   @Get('amenities/list')
   @ApiOperation({ summary: 'Get all available amenities' })
   @ApiResponse({ status: 200, description: 'List of all amenities' })

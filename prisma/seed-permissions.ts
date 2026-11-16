@@ -14,6 +14,7 @@ const rolePermissions: Record<string, SystemPermission[]> = {
     SystemPermission.APPLICATION_UPDATE_OWN,
     SystemPermission.APPLICATION_DELETE_OWN,
     SystemPermission.USER_READ_OWN,
+    SystemPermission.USER_READ_CONTACT,
     SystemPermission.USER_UPDATE_OWN,
   ],
   LANDLORD: [
@@ -27,6 +28,7 @@ const rolePermissions: Record<string, SystemPermission[]> = {
     SystemPermission.APPLICATION_READ_ANY,
     SystemPermission.APPLICATION_STATUS_UPDATE_OWN,
     SystemPermission.USER_READ_ANY,
+    SystemPermission.USER_READ_CONTACT,
     SystemPermission.USER_READ_OWN,
     SystemPermission.USER_UPDATE_OWN,
   ],

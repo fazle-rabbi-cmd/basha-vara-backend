@@ -8,11 +8,33 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AuthEmailQueueService } from '../email/auth-email-queue.service.js';
 import { AuthActionTokenPurpose } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import { OAuth2Client } from 'google-auth-library';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { vi } from 'vitest';
 import { AUTH_EMAIL_PURPOSE } from '../email/auth-email.types.js';
+
+// Mock OAuth2Client
+vi.mock('google-auth-library', () => ({
+  OAuth2Client: vi.fn().mockImplementation(function() {
+    return {
+      verifyIdToken: vi.fn().mockResolvedValue({
+        getPayload: () => ({
+          sub: 'google-user-id',
+          email: 'google@example.com',
+          email_verified: true,
+          name: 'Google User',
+          picture: 'https://example.com/avatar.jpg',
+        }),
+      }),
+      generateAuthUrl: vi.fn().mockReturnValue('https://accounts.google.com/o/oauth2/auth?...'),
+      getToken: vi.fn().mockResolvedValue({
+        tokens: {
+          id_token: 'mock-id-token',
+        },
+      }),
+    };
+  }),
+}));
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -22,10 +44,25 @@ describe('AuthService', () => {
   const mockPrismaService = {
     user: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
     },
     authActionToken: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    role: {
+      findUnique: vi.fn(),
+    },
+    tenantProfile: {
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    landlordProfile: {
+      create: vi.fn(),
+      update: vi.fn(),
     },
     $transaction: vi.fn(),
   };
@@ -86,6 +123,8 @@ describe('AuthService', () => {
       };
 
       mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+      mockPrismaService.user.findFirst.mockResolvedValueOnce(null);
+      mockPrismaService.role.findUnique.mockResolvedValue({ id: 'role-id', name: 'TENANT' });
       mockPrismaService.$transaction.mockImplementation(async (callback) => {
         const tx = {
           user: {
@@ -146,9 +185,14 @@ describe('AuthService', () => {
         phone: '01712345678',
       };
 
-      mockPrismaService.user.findUnique
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'existing' });
+      mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+      mockPrismaService.user.findFirst.mockResolvedValueOnce({ id: 'existing' });
+
+      const result = await service.register(dto).catch(e => e);
+      console.log('Register result:', result);
+      console.log('findUnique calls:', mockPrismaService.user.findUnique.mock.calls);
+      console.log('findFirst calls:', mockPrismaService.user.findFirst.mock.calls);
+      console.log('findFirst results:', mockPrismaService.user.findFirst.mock.results);
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
     });
@@ -161,6 +205,8 @@ describe('AuthService', () => {
       };
 
       mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+      mockPrismaService.user.findFirst.mockResolvedValueOnce(null);
+      mockPrismaService.role.findUnique.mockResolvedValue({ id: 'role-id', name: 'TENANT' });
       mockPrismaService.$transaction.mockImplementation(async (callback) => {
         const tx = {
           user: {
@@ -209,6 +255,10 @@ describe('AuthService', () => {
         email: 'google@example.com',
         passwordHash: null,
         status: UserStatus.ACTIVE,
+        fullName: 'Google User',
+        roles: [{ role: { name: 'TENANT' } }],
+        tenantProfile: { id: 'tenant-1' },
+        landlordProfile: null,
       });
 
       await expect(service.login({
@@ -313,11 +363,8 @@ describe('AuthService', () => {
         tenantProfile: { create: vi.fn() },
         landlordProfile: { create: vi.fn().mockResolvedValue(landlordProfile) },
       };
-      const googleClient = (service as unknown as { googleClient: OAuth2Client }).googleClient;
-      vi.spyOn(googleClient, 'verifyIdToken').mockResolvedValue({
-        getPayload: () => ({ email, email_verified: true, name: createdUser.fullName }),
-      } as never);
       mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+      mockPrismaService.role.findUnique.mockResolvedValue({ id: 'role-id', name: 'LANDLORD' });
       mockPrismaService.$transaction.mockImplementation((callback) => callback(transaction));
       mockJwtService.sign.mockReturnValue('jwt-token');
 
@@ -355,11 +402,8 @@ describe('AuthService', () => {
         },
         tenantProfile: { create: vi.fn() },
       };
-      const googleClient = (service as unknown as { googleClient: OAuth2Client }).googleClient;
-      vi.spyOn(googleClient, 'verifyIdToken').mockResolvedValue({
-        getPayload: () => ({ email, email_verified: true, name: 'Google User' }),
-      } as never);
       mockPrismaService.user.findUnique.mockResolvedValueOnce(null);
+      mockPrismaService.role.findUnique.mockResolvedValue({ id: 'role-id', name: 'TENANT' });
       mockPrismaService.$transaction.mockImplementation((callback) => callback(transaction));
       mockJwtService.sign.mockReturnValue('jwt-token');
 
