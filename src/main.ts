@@ -5,10 +5,9 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter.js';
-import compression from 'compression';
 
-// Type assertion for compression module compatibility with ES modules
-const compressionMiddleware = compression as any;
+// @ts-ignore - compression module types are available but not recognized by nodenext
+import compression from 'compression';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -18,7 +17,7 @@ async function bootstrap() {
   logger.log('NestJS application created successfully');
 
   // Enable gzip compression for faster responses
-  app.use(compressionMiddleware());
+  app.use(compression());
 
   // Security headers
   app.use(helmet({
