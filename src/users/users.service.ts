@@ -84,6 +84,92 @@ export class UsersService {
     };
   }
 
+  async getPublicProfile(userId: string, requestingUser?: { id: string; roles?: string[] } | null) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            role: true,
+          },
+        },
+        tenantProfile: true,
+        landlordProfile: true,
+        _count: {
+          select: {
+            properties: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isOwnProfile = requestingUser?.id === userId;
+    const roles = user.roles.map((r) => r.role.name);
+    const isLandlord = roles.includes('LANDLORD');
+    const isTenant = roles.includes('TENANT');
+
+    // Return limited public info
+    const publicProfile: any = {
+      id: user.id,
+      fullName: user.fullName,
+      avatarUrl: user.avatarUrl,
+      roles,
+      createdAt: user.createdAt,
+      // Member since (years on platform)
+      memberSince: this.getMemberSince(user.createdAt),
+    };
+
+    // Add role-specific public info
+    if (isLandlord && user.landlordProfile) {
+      publicProfile.landlordInfo = {
+        businessName: user.landlordProfile.businessName,
+        bio: user.landlordProfile.bio,
+        propertyCount: user._count.properties,
+        contactPreference: user.landlordProfile.contactPreference,
+      };
+    }
+
+    // Tenant details (occupation, budget, household) are only visible to
+    // landlords/admins or the tenant themselves — never to anonymous visitors
+    const requesterRoles = requestingUser?.roles ?? [];
+    const canViewTenantDetails =
+      isOwnProfile ||
+      requesterRoles.some((r) =>
+        ['LANDLORD', 'ADMIN', 'SUPER_ADMIN'].includes(r),
+      );
+
+    if (isTenant && user.tenantProfile && canViewTenantDetails) {
+      publicProfile.tenantInfo = {
+        occupation: user.tenantProfile.occupation,
+        householdSize: user.tenantProfile.householdSize,
+        bio: user.tenantProfile.bio,
+        budgetMin: user.tenantProfile.budgetMin?.toString(),
+        budgetMax: user.tenantProfile.budgetMax?.toString(),
+      };
+    }
+
+    // Contact info is NEVER returned via public profile endpoint
+    // Use existing milestone-based contact reveal instead
+
+    return publicProfile;
+  }
+
+  private getMemberSince(createdAt: Date): string {
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - createdAt.getTime());
+    const diffYears = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 365));
+
+    if (diffYears < 1) {
+      const diffMonths = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 30));
+      return diffMonths === 1 ? '1 month' : `${diffMonths} months`;
+    }
+    return diffYears === 1 ? '1 year' : `${diffYears} years`;
+  }
+
   async updateUser(userId: string, dto: UpdateUserDto) {
     const updated = await this.prisma.user.update({
       where: { id: userId },
