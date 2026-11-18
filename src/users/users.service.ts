@@ -149,6 +149,8 @@ export class UsersService {
         bio: user.tenantProfile.bio,
         budgetMin: user.tenantProfile.budgetMin?.toString(),
         budgetMax: user.tenantProfile.budgetMax?.toString(),
+        religion: user.tenantProfile.religion,
+        nationality: user.tenantProfile.nationality,
       };
     }
 
@@ -215,6 +217,8 @@ export class UsersService {
         budgetMax: dto.budgetMax !== undefined ? new Prisma.Decimal(dto.budgetMax) : null,
         preferredPropertyTypes: dto.preferredPropertyTypes ?? [],
         bio: dto.bio,
+        religion: dto.religion,
+        nationality: dto.nationality,
       },
       update: {
         ...(dto.occupation !== undefined && { occupation: dto.occupation }),
@@ -225,6 +229,8 @@ export class UsersService {
         ...(dto.budgetMax !== undefined && { budgetMax: new Prisma.Decimal(dto.budgetMax) }),
         ...(dto.preferredPropertyTypes !== undefined && { preferredPropertyTypes: dto.preferredPropertyTypes }),
         ...(dto.bio !== undefined && { bio: dto.bio }),
+        ...(dto.religion !== undefined && { religion: dto.religion }),
+        ...(dto.nationality !== undefined && { nationality: dto.nationality }),
       },
     });
 
