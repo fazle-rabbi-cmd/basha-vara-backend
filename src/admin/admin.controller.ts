@@ -182,3 +182,30 @@ export class AdminController {
     return this.adminService.resetUserPassword(id, req.user.roles);
   }
 }
+
+@ApiTags('Public')
+@Controller('public')
+export class PublicController {
+  constructor(private readonly adminService: AdminService) {}
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Public platform statistics (no authentication required)' })
+  @ApiResponse({ status: 200, description: 'High-level counts for homepage display' })
+  async getPublicStats() {
+    const metrics = await this.adminService.getMetrics();
+    return {
+      totalProperties: metrics.properties.total,
+      totalLandlords: metrics.users.landlords,
+      totalTenants: metrics.users.tenants,
+      successRate: null,
+    };
+  }
+
+  @Get('popular-areas')
+  @ApiOperation({ summary: 'Popular areas by property count (no authentication required)' })
+  @ApiResponse({ status: 200, description: 'List of top areas with property counts' })
+  async getPopularAreas() {
+    const areas = await this.adminService.getPopularAreas();
+    return areas;
+  }
+}

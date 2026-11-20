@@ -61,6 +61,32 @@ export class AdminService {
     };
   }
 
+  async getPopularAreas() {
+    const properties = await this.prisma.property.findMany({
+      where: {
+        status: PropertyStatus.PUBLISHED,
+        area: {
+          not: '',
+        },
+      },
+      select: {
+        area: true,
+      },
+    });
+
+    const areaCounts = properties.reduce((acc, prop) => {
+      if (prop.area) {
+        acc[prop.area] = (acc[prop.area] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(areaCounts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }
+
   async getProperties(query?: { search?: string; status?: PropertyStatus }) {
     const where: any = {};
     if (query?.status) {
