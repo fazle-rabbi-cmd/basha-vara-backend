@@ -12,9 +12,11 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { PermissionsGuard } from '../common/guards/permissions.guard.js';
 import { ContactInfoGuard } from '../common/guards/contact-info.guard.js';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard.js';
 import { Roles } from '../common/decorators/roles.decorator.js';
 import { RequirePermissions } from '../common/decorators/permissions.decorator.js';
-import { CurrentUser } from '../common/decorators/current-user.decorator.js';
+import { CurrentUser, AuthenticatedUser } from '../common/decorators/current-user.decorator.js';
+import { Public } from '../common/decorators/public.decorator.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { UpdateTenantProfileDto } from './dto/update-tenant-profile.dto.js';
 import { UpdateLandlordProfileDto } from './dto/update-landlord-profile.dto.js';
@@ -37,6 +39,19 @@ export class UsersController {
   @ApiResponse({ status: 200, description: 'User profile retrieved successfully' })
   async getMyProfile(@CurrentUser('id') userId: string) {
     return this.usersService.getUserById(userId, userId);
+  }
+
+  @Public()
+  @Get('public/:id')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Get public user profile (limited info for other users)' })
+  @ApiResponse({ status: 200, description: 'Public profile retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async getPublicProfile(
+    @Param('id') id: string,
+    @CurrentUser() requestingUser?: AuthenticatedUser | null,
+  ) {
+    return this.usersService.getPublicProfile(id, requestingUser);
   }
 
   @Get(':id')

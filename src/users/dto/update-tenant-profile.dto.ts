@@ -79,6 +79,16 @@ export class UpdateTenantProfileDto {
   @IsString()
   gender?: string;
 
+  @ApiPropertyOptional({ example: 'Islam', description: 'Religion (optional)' })
+  @IsOptional()
+  @IsString()
+  religion?: string;
+
+  @ApiPropertyOptional({ example: 'Bangladeshi', description: 'Nationality (optional)' })
+  @IsOptional()
+  @IsString()
+  nationality?: string;
+
   @ApiPropertyOptional({ example: ['Dhanmondi', 'Mirpur DOHS', 'Lalmatia'] })
   @IsOptional()
   @IsArray()
