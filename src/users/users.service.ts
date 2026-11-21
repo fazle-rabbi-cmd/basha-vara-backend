@@ -66,6 +66,20 @@ export class UsersService {
         : this.getContactVisibilitySetting(user.phoneVisibility, user.phone)
       : null;
 
+    const normalizeTenantProfile = (profile: any) => {
+      if (!profile) return null;
+      return {
+        ...profile,
+        budgetMin: profile.budgetMin ? Number(profile.budgetMin) : null,
+        budgetMax: profile.budgetMax ? Number(profile.budgetMax) : null,
+      };
+    };
+
+    const normalizeLandlordProfile = (profile: any) => {
+      if (!profile) return null;
+      return profile;
+    };
+
     return {
       id: user.id,
       email,
@@ -77,8 +91,8 @@ export class UsersService {
       phoneVisibility: user.phoneVisibility,
       revealContactAfterMilestone: user.revealContactAfterMilestone,
       roles: user.roles.map((r) => r.role.name),
-      tenantProfile: user.tenantProfile,
-      landlordProfile: user.landlordProfile,
+      tenantProfile: normalizeTenantProfile(user.tenantProfile),
+      landlordProfile: normalizeLandlordProfile(user.landlordProfile),
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -210,8 +224,18 @@ export class UsersService {
       create: {
         userId,
         occupation: dto.occupation,
+        maritalStatus: dto.maritalStatus,
         moveInDatePreference: dto.moveInDatePreference,
         householdSize: dto.householdSize,
+        hasChildren: dto.hasChildren,
+        childrenCount: dto.childrenCount,
+        youngestChildAge: dto.youngestChildAge,
+        oldestChildAge: dto.oldestChildAge,
+        hasPets: dto.hasPets,
+        petType: dto.petType,
+        smokingStatus: dto.smokingStatus,
+        returnTimePreference: dto.returnTimePreference,
+        gender: dto.gender,
         preferredLocations: dto.preferredLocations ?? [],
         budgetMin: dto.budgetMin !== undefined ? new Prisma.Decimal(dto.budgetMin) : null,
         budgetMax: dto.budgetMax !== undefined ? new Prisma.Decimal(dto.budgetMax) : null,
@@ -222,8 +246,18 @@ export class UsersService {
       },
       update: {
         ...(dto.occupation !== undefined && { occupation: dto.occupation }),
+        ...(dto.maritalStatus !== undefined && { maritalStatus: dto.maritalStatus }),
         ...(dto.moveInDatePreference !== undefined && { moveInDatePreference: dto.moveInDatePreference }),
         ...(dto.householdSize !== undefined && { householdSize: dto.householdSize }),
+        ...(dto.hasChildren !== undefined && { hasChildren: dto.hasChildren }),
+        ...(dto.childrenCount !== undefined && { childrenCount: dto.childrenCount }),
+        ...(dto.youngestChildAge !== undefined && { youngestChildAge: dto.youngestChildAge }),
+        ...(dto.oldestChildAge !== undefined && { oldestChildAge: dto.oldestChildAge }),
+        ...(dto.hasPets !== undefined && { hasPets: dto.hasPets }),
+        ...(dto.petType !== undefined && { petType: dto.petType }),
+        ...(dto.smokingStatus !== undefined && { smokingStatus: dto.smokingStatus }),
+        ...(dto.returnTimePreference !== undefined && { returnTimePreference: dto.returnTimePreference }),
+        ...(dto.gender !== undefined && { gender: dto.gender }),
         ...(dto.preferredLocations !== undefined && { preferredLocations: dto.preferredLocations }),
         ...(dto.budgetMin !== undefined && { budgetMin: new Prisma.Decimal(dto.budgetMin) }),
         ...(dto.budgetMax !== undefined && { budgetMax: new Prisma.Decimal(dto.budgetMax) }),
