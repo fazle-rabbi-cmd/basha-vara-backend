@@ -5,12 +5,14 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ApplicationsService } from './applications.service.js';
 import { CreateRentalApplicationDto } from './dto/create-application.dto.js';
+import { UpdateRentalApplicationDto } from './dto/update-application.dto.js';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
@@ -58,6 +60,20 @@ export class TenantApplicationsController {
   @ApiResponse({ status: 200, description: 'List of submitted tenant rental applications' })
   async getMyApplications(@CurrentUser('id') tenantId: string) {
     return this.applicationsService.findTenantApplications(tenantId);
+  }
+
+  @Put(':id')
+  @Roles('TENANT')
+  @ApiOperation({ summary: 'Update a submitted application (tenant only)' })
+  @ApiResponse({ status: 200, description: 'Application updated successfully' })
+  @ApiResponse({ status: 400, description: 'Application is not submitted or invalid data' })
+  @ApiResponse({ status: 403, description: 'Not the owner of this application' })
+  async updateApplication(
+    @Param('id') id: string,
+    @CurrentUser('id') tenantId: string,
+    @Body() dto: UpdateRentalApplicationDto,
+  ) {
+    return this.applicationsService.update(id, tenantId, dto);
   }
 }
 

@@ -5,11 +5,13 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { VisitsService } from './visits.service.js';
 import { CreateVisitRequestDto } from './dto/create-visit-request.dto.js';
+import { UpdateVisitRequestDto } from './dto/update-visit-request.dto.js';
 import { UpdateVisitStatusDto } from './dto/update-visit-status.dto.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
@@ -105,6 +107,20 @@ export class TenantVisitsController {
   @ApiResponse({ status: 200, description: 'List of tenant visit requests' })
   async getMyVisits(@CurrentUser('id') tenantId: string) {
     return this.visitsService.findTenantVisits(tenantId);
+  }
+
+  @Put(':id')
+  @Roles('TENANT')
+  @ApiOperation({ summary: 'Update a pending visit request (tenant only)' })
+  @ApiResponse({ status: 200, description: 'Visit request updated successfully' })
+  @ApiResponse({ status: 400, description: 'Visit request is not pending or invalid data' })
+  @ApiResponse({ status: 403, description: 'Not the owner of this visit request' })
+  async updateVisit(
+    @Param('id') id: string,
+    @CurrentUser('id') tenantId: string,
+    @Body() dto: UpdateVisitRequestDto,
+  ) {
+    return this.visitsService.update(id, tenantId, dto);
   }
 }
 

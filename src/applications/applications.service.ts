@@ -7,6 +7,7 @@ import {
 import { ApplicationStatus, Prisma, PropertyStatus, NotificationType, VisitStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateRentalApplicationDto } from './dto/create-application.dto.js';
+import { UpdateRentalApplicationDto } from './dto/update-application.dto.js';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationEmailQueueService } from '../email/notification-email-queue.service.js';
@@ -142,6 +143,90 @@ export class ApplicationsService {
     );
 
     return application;
+  }
+
+  async update(applicationId: string, tenantId: string, dto: UpdateRentalApplicationDto) {
+    const application = await this.prisma.rentalApplication.findUnique({
+      where: { id: applicationId },
+      include: {
+        property: true,
+      },
+    });
+
+    if (!application) {
+      throw new NotFoundException(`Rental application with ID ${applicationId} not found`);
+    }
+
+    if (application.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only edit your own applications');
+    }
+
+    if (application.status !== ApplicationStatus.SUBMITTED) {
+      throw new BadRequestException('You can only edit applications that are in submitted status');
+    }
+
+    // Validate verifiedVisitId if provided
+    if (dto.verifiedVisitId !== undefined) {
+      if (dto.verifiedVisitId) {
+        const verifiedVisit = await this.prisma.visitRequest.findUnique({
+          where: { id: dto.verifiedVisitId },
+        });
+
+        if (!verifiedVisit) {
+          throw new NotFoundException('Verified visit not found');
+        }
+
+        if (verifiedVisit.tenantId !== tenantId) {
+          throw new BadRequestException('You can only use your own verified visits');
+        }
+
+        if (verifiedVisit.propertyId !== application.propertyId) {
+          throw new BadRequestException('Verified visit must be for this property');
+        }
+
+        if (verifiedVisit.status !== VisitStatus.COMPLETED || !verifiedVisit.visitVerifiedAt) {
+          throw new BadRequestException('Visit must be completed and verified before application');
+        }
+
+        // Check if this visit is already used for another application
+        const existingAppWithVisit = await this.prisma.rentalApplication.findFirst({
+          where: {
+            verifiedVisitId: dto.verifiedVisitId,
+            id: { not: applicationId },
+          },
+        });
+
+        if (existingAppWithVisit) {
+          throw new BadRequestException('This verified visit is already linked to another application');
+        }
+      }
+    }
+
+    const updatedApplication = await this.prisma.rentalApplication.update({
+      where: { id: applicationId },
+      data: {
+        ...(dto.coverNote !== undefined && { coverNote: dto.coverNote?.trim() || null }),
+        ...(dto.moveInDate !== undefined && { moveInDate: dto.moveInDate }),
+        ...(dto.proposedRent !== undefined && { proposedRent: new Prisma.Decimal(dto.proposedRent) }),
+        ...(dto.verifiedVisitId !== undefined && { verifiedVisitId: dto.verifiedVisitId || null }),
+      },
+      include: {
+        property: {
+          select: {
+            id: true,
+            title: true,
+            addressLine: true,
+            area: true,
+            city: true,
+            rentAmount: true,
+            photos: { take: 1 },
+            landlordId: true,
+          },
+        },
+      },
+    });
+
+    return updatedApplication;
   }
 
   async findTenantApplications(tenantId: string) {

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateVisitRequestDto } from './dto/create-visit-request.dto.js';
+import { UpdateVisitRequestDto } from './dto/update-visit-request.dto.js';
 import { UpdateVisitStatusDto } from './dto/update-visit-status.dto.js';
 import { VisitStatus, NotificationType, PaymentType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service.js';
@@ -105,6 +106,52 @@ export class VisitsService {
     );
 
     return visit;
+  }
+
+  async update(visitId: string, tenantId: string, dto: UpdateVisitRequestDto) {
+    const visit = await this.prisma.visitRequest.findUnique({
+      where: { id: visitId },
+    });
+
+    if (!visit) {
+      throw new NotFoundException(`Visit request with ID ${visitId} not found`);
+    }
+
+    if (visit.tenantId !== tenantId) {
+      throw new ForbiddenException('You can only edit your own visit requests');
+    }
+
+    if (visit.status !== VisitStatus.PENDING) {
+      throw new BadRequestException('You can only edit visit requests that are pending');
+    }
+
+    const updatedVisit = await this.prisma.visitRequest.update({
+      where: { id: visitId },
+      data: {
+        ...(dto.requestedDate !== undefined && { requestedDate: dto.requestedDate }),
+        ...(dto.requestedTime !== undefined && { requestedTime: dto.requestedTime.trim() }),
+        ...(dto.message !== undefined && { message: dto.message?.trim() || null }),
+        ...(dto.visitType !== undefined && { visitType: dto.visitType }),
+        ...(dto.guestCount !== undefined && { guestCount: dto.guestCount }),
+        ...(dto.contactPhone !== undefined && { contactPhone: dto.contactPhone || null }),
+      },
+      include: {
+        property: {
+          select: {
+            id: true,
+            title: true,
+            addressLine: true,
+            area: true,
+            city: true,
+            rentAmount: true,
+            photos: { take: 1 },
+            landlordId: true,
+          },
+        },
+      },
+    });
+
+    return updatedVisit;
   }
 
   async findTenantVisits(tenantId: string) {
