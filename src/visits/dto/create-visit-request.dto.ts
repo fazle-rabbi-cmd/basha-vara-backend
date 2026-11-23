@@ -1,22 +1,60 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDate, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsArray,
+  IsDate,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export enum VisitType {
   IN_PERSON = 'IN_PERSON',
   VIDEO_CALL = 'VIDEO_CALL',
 }
 
-export class CreateVisitRequestDto {
-  @ApiProperty({ example: '2026-11-05T00:00:00.000Z', description: 'Proposed date for the visit' })
-  @Type(() => Date)
-  @IsDate()
-  requestedDate: Date;
-
-  @ApiProperty({ example: '3:30 PM', description: 'Preferred time slot for the visit' })
+export class ProposedSlotDto {
+  @ApiProperty({ example: '2026-12-01', description: 'Proposed date (YYYY-MM-DD)' })
   @IsString()
   @IsNotEmpty()
-  requestedTime: string;
+  date: string;
+
+  @ApiProperty({ example: '14:30', description: 'Proposed time (HH:mm or 10:00 AM)' })
+  @IsString()
+  @IsNotEmpty()
+  time: string;
+
+  @ApiPropertyOptional({ example: 0, description: 'Candidate slot index' })
+  @IsOptional()
+  @IsNumber()
+  slotIndex?: number;
+}
+
+export class CreateVisitRequestDto {
+  @ApiPropertyOptional({ example: '2026-12-01T00:00:00.000Z', description: 'Primary requested date' })
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  requestedDate?: Date;
+
+  @ApiPropertyOptional({ example: '10:00 AM', description: 'Primary requested time' })
+  @IsOptional()
+  @IsString()
+  requestedTime?: string;
+
+  @ApiPropertyOptional({
+    type: [ProposedSlotDto],
+    description: '1 to 3 candidate slots proposed by tenant',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProposedSlotDto)
+  proposedSlots?: ProposedSlotDto[];
 
   @ApiPropertyOptional({ example: 'I would like to inspect the master bedroom and balcony ventilation.' })
   @IsOptional()

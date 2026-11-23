@@ -8,6 +8,8 @@ import {
 import { EscrowStatus, PaymentStatus, PaymentType } from '@prisma/client';
 import { EscrowService } from './escrow.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { LedgerService } from '../payments/ledger.service.js';
+import { PaymentProvider } from '../payments/providers/payment-provider.interface.js';
 
 describe('EscrowService', () => {
   let service: EscrowService;
@@ -53,10 +55,41 @@ describe('EscrowService', () => {
       userRole: { findMany: vi.fn() },
     };
 
+    const mockLedgerService = {
+      recordRelease: vi.fn().mockResolvedValue(undefined),
+      recordRefund: vi.fn().mockResolvedValue(undefined),
+      recordPayment: vi.fn().mockResolvedValue(undefined),
+      getOrCreateAccount: vi.fn().mockResolvedValue({ id: 'account-1' }),
+      createEntry: vi.fn().mockResolvedValue({ id: 'entry-1' }),
+      getAccountBalance: vi.fn().mockResolvedValue(0),
+      getAccountEntries: vi.fn().mockResolvedValue([]),
+    };
+
+    const mockPaymentProvider = {
+      initiatePayment: vi.fn().mockResolvedValue({
+        success: true,
+        transactionId: 'txn-1',
+        status: 'COMPLETED',
+      }),
+      processRefund: vi.fn().mockResolvedValue({
+        success: true,
+        refundId: 'refund-1',
+        status: 'COMPLETED',
+      }),
+      verifyWebhookSignature: vi.fn().mockReturnValue(true),
+      getPaymentStatus: vi.fn().mockResolvedValue({
+        success: true,
+        transactionId: 'txn-1',
+        status: 'COMPLETED',
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EscrowService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: LedgerService, useValue: mockLedgerService },
+        { provide: 'PAYMENT_PROVIDER', useValue: mockPaymentProvider },
       ],
     }).compile();
 
@@ -316,9 +349,12 @@ describe('EscrowService', () => {
 
       expect(result.escrowStatus).toBe(EscrowStatus.PARTIALLY_RELEASED);
       const updateCall = prisma.payment.update.mock.calls[0][0];
-      expect(updateCall.data.landlordAmount).toBeCloseTo(6796.79, 1);
-      expect(updateCall.data.tenantAmount).toBeCloseTo(2912.91, 1);
-      expect(updateCall.data.platformFee).toBeCloseTo(290.3, 1);
+      // platformFee = 320 BDT, remaining = 9680 BDT
+      // landlordAmount = 9680 * 0.70 = 6776 BDT
+      // tenantAmount = 9680 * 0.30 = 2904 BDT
+      expect(updateCall.data.landlordAmount).toBeCloseTo(6776, 1);
+      expect(updateCall.data.tenantAmount).toBeCloseTo(2904, 1);
+      expect(updateCall.data.platformFee).toBeCloseTo(320, 1);
     });
 
     it('rejects resolve when escrow not disputed', async () => {
@@ -351,16 +387,17 @@ describe('EscrowService', () => {
   describe('calculateEscrowSplit', () => {
     it('calculates platform fee correctly', async () => {
       const split = await service.calculateEscrowSplit(10000);
-      // fee = 10000 * 2.9% + 0.30 = 290.30
-      expect(split.platformFee).toBeCloseTo(290.3, 1);
-      expect(split.landlordAmount).toBeCloseTo(9709.7, 1);
+      // fee = (10000 * 100 * 290 / 10000) + 3000 = 29000 + 3000 = 32000 poisha = 320 BDT
+      expect(split.platformFee).toBeCloseTo(320, 1);
+      expect(split.landlordAmount).toBeCloseTo(9680, 1);
       expect(split.tenantAmount).toBe(0);
     });
 
     it('handles small amounts', async () => {
       const split = await service.calculateEscrowSplit(100);
-      expect(split.platformFee).toBeCloseTo(3.2, 1);
-      expect(split.landlordAmount).toBeCloseTo(96.8, 1);
+      // fee = (100 * 100 * 290 / 10000) + 3000 = 290 + 3000 = 3290 poisha = 32.90 BDT
+      expect(split.platformFee).toBeCloseTo(32.9, 1);
+      expect(split.landlordAmount).toBeCloseTo(67.1, 1);
     });
   });
 });

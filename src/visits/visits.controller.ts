@@ -2,17 +2,33 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
   Put,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { VisitsService } from './visits.service.js';
-import { CreateVisitRequestDto } from './dto/create-visit-request.dto.js';
-import { UpdateVisitRequestDto } from './dto/update-visit-request.dto.js';
-import { UpdateVisitStatusDto } from './dto/update-visit-status.dto.js';
+import {
+  CreateVisitRequestDto,
+  UpdateVisitRequestDto,
+  UpdateVisitStatusDto,
+  AcceptSlotDto,
+  DeclineVisitDto,
+  ProposeRescheduleDto,
+  RespondRescheduleDto,
+  CancelVisitDto,
+  SetPropertyAvailabilityDto,
+  VerifyCheckInDto,
+  ConfirmVideoCallDto,
+  ReportLandlordNoShowDto,
+} from './dto/index.js';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../common/guards/roles.guard.js';
 import { PermissionsGuard } from '../common/guards/permissions.guard.js';
@@ -28,8 +44,156 @@ import { SystemPermission } from '@prisma/client';
 export class VisitsController {
   constructor(private readonly visitsService: VisitsService) {}
 
+  @Patch(':id/accept-slot')
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Landlord accepts a candidate slot, confirming the visit' })
+  @ApiResponse({ status: 200, description: 'Visit slot confirmed successfully' })
+  @ApiResponse({ status: 400, description: 'Double-booking or invalid slot' })
+  async acceptSlot(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: AcceptSlotDto,
+  ) {
+    return this.visitsService.acceptSlot(id, user.id, user.roles, dto);
+  }
+
+  @Patch(':id/decline')
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Landlord declines visit request with structured reason code' })
+  @ApiResponse({ status: 200, description: 'Visit request declined successfully' })
+  async declineVisit(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DeclineVisitDto,
+  ) {
+    return this.visitsService.declineVisit(id, user.id, user.roles, dto);
+  }
+
+  @Patch(':id/propose-reschedule')
+  @ApiOperation({ summary: 'Propose a new visit date/time slot (Landlord or Tenant)' })
+  @ApiResponse({ status: 200, description: 'Reschedule proposed successfully' })
+  async proposeReschedule(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ProposeRescheduleDto,
+  ) {
+    return this.visitsService.proposeReschedule(id, user.id, user.roles, dto);
+  }
+
+  @Patch(':id/respond-reschedule')
+  @ApiOperation({ summary: 'Accept or decline counterpart reschedule proposal' })
+  @ApiResponse({ status: 200, description: 'Reschedule proposal responded to' })
+  async respondReschedule(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RespondRescheduleDto,
+  ) {
+    return this.visitsService.respondReschedule(id, user.id, user.roles, dto);
+  }
+
+  @Patch(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a requested or confirmed visit (subject to 2h cutoff)' })
+  @ApiResponse({ status: 200, description: 'Visit cancelled successfully' })
+  @ApiResponse({ status: 400, description: 'Cannot cancel within cutoff window' })
+  async cancelVisit(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CancelVisitDto,
+  ) {
+    return this.visitsService.cancelVisit(id, user.id, user.roles, dto);
+  }
+
+  @Get(':id/check-in-code')
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @ApiOperation({ summary: 'Tenant retrieves their 6-digit verification code to display during visit' })
+  @ApiResponse({ status: 200, description: 'Check-in code and window status returned' })
+  @ApiResponse({ status: 403, description: 'Only scheduled tenant or admin can access check-in code' })
+  async getTenantCheckInCode(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.visitsService.getTenantCheckInCode(id, user.id, user.roles);
+  }
+
+  @Post(':id/verify-check-in')
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({ summary: 'Landlord verifies the tenant check-in code with optional GPS soft signal' })
+  @ApiResponse({ status: 200, description: 'Visit verified and marked completed' })
+  @ApiResponse({ status: 400, description: 'Invalid code or check-in window closed' })
+  @ApiResponse({ status: 403, description: 'Verification locked after 5 failed attempts' })
+  async verifyCheckIn(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: VerifyCheckInDto,
+  ) {
+    return this.visitsService.verifyCheckIn(id, user.id, user.roles, dto);
+  }
+
+  @Post(':id/confirm-video-call')
+  @Roles('TENANT', 'LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({ summary: 'Tenant or Landlord confirms completion of a scheduled video visit call' })
+  @ApiResponse({ status: 200, description: 'Video call confirmed (marked COMPLETED when both confirm)' })
+  async confirmVideoCall(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ConfirmVideoCallDto,
+  ) {
+    return this.visitsService.confirmVideoCall(id, user.id, user.roles, dto);
+  }
+
+  @Post(':id/report-landlord-no-show')
+  @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Tenant reports landlord no-show after scheduled visit window has concluded' })
+  @ApiResponse({ status: 200, description: 'Landlord no-show recorded and trust score penalized' })
+  @ApiResponse({ status: 400, description: 'Cannot report no-show before window ends' })
+  async reportLandlordNoShow(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ReportLandlordNoShowDto,
+  ) {
+    return this.visitsService.reportLandlordNoShow(id, user.id, user.roles, dto);
+  }
+
+  @Post(':id/report-no-show')
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Report tenant no-show after scheduled visit window has concluded' })
+  @ApiResponse({ status: 200, description: 'No-show recorded successfully' })
+  @ApiResponse({ status: 400, description: 'Cannot report no-show before window ends' })
+  async reportNoShow(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.visitsService.reportNoShow(id, user.id, user.roles);
+  }
+
+  @Get(':id/ics')
+  @ApiOperation({ summary: 'Export RFC 5545 .ics calendar invitation for confirmed visit' })
+  @ApiResponse({ status: 200, description: 'iCalendar file' })
+  async getIcs(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.visitsService.getVisitIcs(id, user.id, user.roles);
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    return result.content;
+  }
+
+  @Post('system/auto-expire')
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'System job: auto-expire visit requests older than 48 hours' })
+  @ApiResponse({ status: 200, description: 'Expired requests processed' })
+  async autoExpireRequests() {
+    return this.visitsService.autoExpireRequests();
+  }
+
+  // Legacy status endpoint maintained for backward compatibility
   @Patch(':id/status')
-  @RequirePermissions(SystemPermission.VISIT_UPDATE_OWN)
   @ApiOperation({ summary: 'Update visit request status (accept, decline, cancel, or complete)' })
   @ApiResponse({ status: 200, description: 'Visit status updated successfully' })
   async updateStatus(
@@ -143,11 +307,11 @@ export class LandlordVisitsController {
 @ApiTags('Visits')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionsGuard)
-@Controller('properties/:propertyId/visits')
+@Controller('properties/:propertyId')
 export class PropertyVisitsController {
   constructor(private readonly visitsService: VisitsService) {}
 
-  @Post()
+  @Post('visits')
   @Roles('TENANT', 'ADMIN', 'SUPER_ADMIN')
   @RequirePermissions(SystemPermission.VISIT_CREATE)
   @ApiOperation({ summary: 'Submit a physical property visit request (Tenant)' })
@@ -159,5 +323,24 @@ export class PropertyVisitsController {
     @Body() dto: CreateVisitRequestDto,
   ) {
     return this.visitsService.create(propertyId, tenantId, dto);
+  }
+
+  @Get('availability')
+  @ApiOperation({ summary: 'Get active availability windows for a property listing' })
+  @ApiResponse({ status: 200, description: 'List of weekly availability windows' })
+  async getAvailability(@Param('propertyId') propertyId: string) {
+    return this.visitsService.getPropertyAvailability(propertyId);
+  }
+
+  @Post('availability')
+  @Roles('LANDLORD', 'ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({ summary: 'Configure weekly availability windows for a property listing' })
+  @ApiResponse({ status: 200, description: 'Updated availability windows' })
+  async setAvailability(
+    @Param('propertyId') propertyId: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SetPropertyAvailabilityDto,
+  ) {
+    return this.visitsService.setPropertyAvailability(propertyId, user.id, user.roles, dto);
   }
 }

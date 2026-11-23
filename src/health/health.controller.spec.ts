@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthController } from './health.controller.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 
 describe('HealthController', () => {
   let controller: HealthController;
   let prisma: PrismaService;
+  let pgBoss: PgBossService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -16,11 +18,18 @@ describe('HealthController', () => {
             $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
           },
         },
+        {
+          provide: PgBossService,
+          useValue: {
+            getBoss: vi.fn().mockResolvedValue({}),
+          },
+        },
       ],
     }).compile();
 
     controller = module.get<HealthController>(HealthController);
     prisma = module.get<PrismaService>(PrismaService);
+    pgBoss = module.get<PgBossService>(PgBossService);
   });
 
   it('should be defined', () => {

@@ -12,6 +12,7 @@ import { UpdateApplicationStatusDto } from './dto/update-application-status.dto.
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { NotificationEmailQueueService } from '../email/notification-email-queue.service.js';
 import { NotificationDigestService } from '../email/notification-digest.service.js';
+import { WORKFLOW_CONFIG } from '../config/workflow.config.js';
 
 @Injectable()
 export class ApplicationsService {
@@ -39,6 +40,18 @@ export class ApplicationsService {
       throw new BadRequestException('This property is not currently accepting rental applications');
     }
 
+    // Check if property is locked by another visit
+    if (property.lockedByVisitId && property.lockedUntil && new Date() < property.lockedUntil) {
+      const lockedVisit = await this.prisma.visitRequest.findUnique({
+        where: { id: property.lockedByVisitId },
+        select: { tenantId: true },
+      });
+
+      if (lockedVisit && lockedVisit.tenantId !== tenantId) {
+        throw new BadRequestException('This property is currently locked by another tenant\'s token hold. Please try again later.');
+      }
+    }
+
     // Check for existing active application
     const existingActive = await this.prisma.rentalApplication.findFirst({
       where: {
@@ -59,36 +72,46 @@ export class ApplicationsService {
       throw new BadRequestException('You already have an active application submitted for this property');
     }
 
-    // Require verified visit for application submission
-    if (dto.verifiedVisitId) {
-      const verifiedVisit = await this.prisma.visitRequest.findUnique({
-        where: { id: dto.verifiedVisitId },
-      });
+    // Require verified visit for application submission (mandatory policy)
+    if (!dto.verifiedVisitId) {
+      throw new BadRequestException('A verified visit is required to submit an application');
+    }
 
-      if (!verifiedVisit) {
-        throw new NotFoundException('Verified visit not found');
-      }
+    const verifiedVisit = await this.prisma.visitRequest.findUnique({
+      where: { id: dto.verifiedVisitId },
+    });
 
-      if (verifiedVisit.tenantId !== tenantId) {
-        throw new BadRequestException('You can only use your own verified visits');
-      }
+    if (!verifiedVisit) {
+      throw new NotFoundException('Verified visit not found');
+    }
 
-      if (verifiedVisit.propertyId !== propertyId) {
-        throw new BadRequestException('Verified visit must be for this property');
-      }
+    if (verifiedVisit.tenantId !== tenantId) {
+      throw new BadRequestException('You can only use your own verified visits');
+    }
 
-      if (verifiedVisit.status !== VisitStatus.COMPLETED || !verifiedVisit.visitVerifiedAt) {
-        throw new BadRequestException('Visit must be completed and verified before application');
-      }
+    if (verifiedVisit.propertyId !== propertyId) {
+      throw new BadRequestException('Verified visit must be for this property');
+    }
 
-      // Check if this visit is already used for another application
-      const existingAppWithVisit = await this.prisma.rentalApplication.findFirst({
-        where: { verifiedVisitId: dto.verifiedVisitId },
-      });
+    if (verifiedVisit.status !== VisitStatus.COMPLETED || !verifiedVisit.visitVerifiedAt) {
+      throw new BadRequestException('Visit must be completed and verified before application');
+    }
 
-      if (existingAppWithVisit) {
-        throw new BadRequestException('This verified visit is already linked to another application');
-      }
+    // Check if verified visitor status is still valid (not expired)
+    const now = new Date();
+    const verifiedAt = verifiedVisit.visitVerifiedAt || verifiedVisit.createdAt;
+    const expiryTime = new Date(verifiedAt.getTime() + WORKFLOW_CONFIG.verification.verifiedVisitorExpiryDays * 24 * 60 * 60 * 1000);
+    if (now.getTime() > expiryTime.getTime()) {
+      throw new BadRequestException('Verified visitor status has expired. Please schedule a new visit.');
+    }
+
+    // Check if this visit is already used for another application
+    const existingAppWithVisit = await this.prisma.rentalApplication.findFirst({
+      where: { verifiedVisitId: dto.verifiedVisitId },
+    });
+
+    if (existingAppWithVisit) {
+      throw new BadRequestException('This verified visit is already linked to another application');
     }
 
     const application = await this.prisma.rentalApplication.create({
@@ -333,11 +356,16 @@ export class ApplicationsService {
 
     // Landlord / Admin selection workflow
     if (dto.status === ApplicationStatus.SELECTED) {
-      // Transactional boundary: select tenant, mark property RENTED, decline remaining applicants
+      // Transactional boundary: select tenant, set payment deadline, waitlist others
       return this.prisma.$transaction(async (tx) => {
+        const paymentDeadline = new Date(Date.now() + WORKFLOW_CONFIG.application.escrowPaymentDeadlineHours * 60 * 60 * 1000);
+
         const selectedApp = await tx.rentalApplication.update({
           where: { id: applicationId },
-          data: { status: ApplicationStatus.SELECTED },
+          data: {
+            status: ApplicationStatus.SELECTED,
+            paymentDeadline,
+          },
           include: {
             property: true,
             tenant: {
@@ -350,13 +378,7 @@ export class ApplicationsService {
           },
         });
 
-        // Mark property as RENTED
-        await tx.property.update({
-          where: { id: application.propertyId },
-          data: { status: PropertyStatus.RENTED },
-        });
-
-        // Auto-reject other pending/under-review/shortlisted applications for this property
+        // Waitlist other pending/under-review/shortlisted applications for this property
         await tx.rentalApplication.updateMany({
           where: {
             propertyId: application.propertyId,
@@ -369,58 +391,36 @@ export class ApplicationsService {
               ],
             },
           },
-          data: { status: ApplicationStatus.REJECTED },
+          data: { status: ApplicationStatus.WAITLISTED },
         });
 
-        // Auto-cancel pending visit requests for this property
-        const pendingVisits = await tx.visitRequest.findMany({
+        // Notify waitlisted applicants
+        const waitlistedApps = await tx.rentalApplication.findMany({
           where: {
             propertyId: application.propertyId,
-            status: VisitStatus.PENDING,
+            status: ApplicationStatus.WAITLISTED,
           },
           select: {
-            id: true,
             tenantId: true,
           },
         });
 
-        if (pendingVisits.length > 0) {
-          await tx.visitRequest.updateMany({
-            where: {
-              propertyId: application.propertyId,
-              status: VisitStatus.PENDING,
-            },
-            data: { status: VisitStatus.CANCELLED },
-          });
-
-          // Notify tenants whose visit requests were cancelled
-          for (const visit of pendingVisits) {
-            await this.notificationsService.create(
-              visit.tenantId,
-              NotificationType.VISIT_CANCELLED,
-              'Visit Request Cancelled',
-              `Your visit request for ${selectedApp.property.title} has been cancelled as the property is now rented`,
-              { propertyId: application.propertyId },
-            );
-
-            // Send email notification
-            await this.emailQueueService.queueNotificationEmail(
-              visit.tenantId,
-              'VISIT_CANCELLED',
-              {
-                propertyTitle: selectedApp.property.title,
-                propertyId: application.propertyId,
-              },
-            );
-          }
+        for (const app of waitlistedApps) {
+          await this.notificationsService.create(
+            app.tenantId,
+            NotificationType.APPLICATION_UNDER_REVIEW,
+            'Application Waitlisted',
+            `Your application for ${selectedApp.property.title} has been waitlisted. You will be notified if the selected tenant does not complete payment.`,
+            { propertyId: application.propertyId },
+          );
         }
 
-        // Notify selected tenant
+        // Notify selected tenant with payment deadline
         await this.notificationsService.create(
           application.tenantId,
           NotificationType.APPLICATION_SELECTED,
           'Application Selected',
-          `Congratulations! Your application for ${selectedApp.property.title} has been selected`,
+          `Congratulations! Your application for ${selectedApp.property.title} has been selected. Please complete escrow payment within 48 hours.`,
           { applicationId, propertyId: application.propertyId },
         );
 
@@ -500,5 +500,81 @@ export class ApplicationsService {
     );
 
     return updatedApplication;
+  }
+
+  /**
+   * Promotes the next waitlisted applicant to SELECTED status
+   * Called when the previously selected tenant fails to complete payment
+   */
+  async promoteNextWaitlisted(propertyId: string) {
+    const nextApplicant = await this.prisma.rentalApplication.findFirst({
+      where: {
+        propertyId,
+        status: ApplicationStatus.WAITLISTED,
+      },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        property: true,
+        tenant: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!nextApplicant) {
+      // No waitlisted applicants, revert property to PUBLISHED
+      await this.prisma.property.update({
+        where: { id: propertyId },
+        data: { status: PropertyStatus.PUBLISHED },
+      });
+      return { promoted: false, reason: 'No waitlisted applicants' };
+    }
+
+    // Set new payment deadline and promote
+    const paymentDeadline = new Date(Date.now() + WORKFLOW_CONFIG.application.escrowPaymentDeadlineHours * 60 * 60 * 1000);
+
+    const promotedApp = await this.prisma.rentalApplication.update({
+      where: { id: nextApplicant.id },
+      data: {
+        status: ApplicationStatus.SELECTED,
+        paymentDeadline,
+      },
+      include: {
+        property: true,
+        tenant: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Notify the promoted tenant
+    await this.notificationsService.create(
+      nextApplicant.tenantId,
+      NotificationType.APPLICATION_SELECTED,
+      'Application Promoted',
+      `The previous applicant did not complete payment. Your application for ${nextApplicant.property.title} has been promoted. Please complete escrow payment within 48 hours.`,
+      { applicationId: nextApplicant.id, propertyId },
+    );
+
+    // Send email to promoted tenant
+    await this.emailQueueService.queueNotificationEmail(
+      nextApplicant.tenantId,
+      'APPLICATION_SELECTED',
+      {
+        propertyTitle: nextApplicant.property.title,
+        propertyId,
+        applicationId: nextApplicant.id,
+      },
+    );
+
+    return { promoted: true, application: promotedApp };
   }
 }

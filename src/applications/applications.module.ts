@@ -13,9 +13,11 @@ import { ApplicationDocumentsController } from './application-documents.controll
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { NotificationEmailQueueModule } from '../email/notification-email-queue.module.js';
+import { PgBossModule } from '../pg-boss/pg-boss.module.js';
+import { ApplicationPaymentDeadlineWorker } from './application-payment-deadline.worker.js';
 
 @Module({
-  imports: [PrismaModule, NotificationsModule, NotificationEmailQueueModule],
+  imports: [PrismaModule, NotificationsModule, NotificationEmailQueueModule, PgBossModule],
   controllers: [
     ApplicationsController,
     TenantApplicationsController,
@@ -24,7 +26,7 @@ import { NotificationEmailQueueModule } from '../email/notification-email-queue.
     ApplicationProfilesController,
     ApplicationDocumentsController,
   ],
-  providers: [ApplicationsService, ApplicationProfilesService, ApplicationDocumentsService],
+  providers: [ApplicationsService, ApplicationProfilesService, ApplicationDocumentsService, ApplicationPaymentDeadlineWorker],
   exports: [ApplicationsService, ApplicationProfilesService, ApplicationDocumentsService],
 })
 export class ApplicationsModule {}

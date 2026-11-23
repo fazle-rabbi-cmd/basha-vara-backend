@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ApplicationPaymentDeadlineWorker } from './application-payment-deadline.worker.js';
 import { vi } from 'vitest';
 import {
   BadRequestException,
@@ -62,6 +63,7 @@ describe('ApplicationsService', () => {
         { provide: NotificationsService, useValue: { create: vi.fn() } },
         { provide: NotificationEmailQueueService, useValue: { queueNotificationEmail: vi.fn() } },
         { provide: NotificationDigestService, useValue: { queueForDigest: vi.fn() } },
+        { provide: ApplicationPaymentDeadlineWorker, useValue: { schedulePaymentDeadline: vi.fn() } },
       ],
     }).compile();
 
@@ -75,10 +77,23 @@ describe('ApplicationsService', () => {
   afterEach(() => vi.clearAllMocks());
 
   describe('create', () => {
-    const dto = { coverNote: '  Hello  ', moveInDate: new Date('2025-02-01') };
+    const dto = {
+      coverNote: '  Hello  ',
+      moveInDate: new Date('2025-02-01'),
+      verifiedVisitId: 'visit-1',
+    };
 
     it('creates an application and notifies landlord', async () => {
       prisma.property.findUnique.mockResolvedValue(mockProperty);
+      prisma.rentalApplication.findFirst.mockResolvedValue(null);
+      prisma.visitRequest.findUnique.mockResolvedValue({
+        id: 'visit-1',
+        tenantId: 'tenant-1',
+        propertyId: 'prop-1',
+        status: VisitStatus.COMPLETED,
+        visitVerifiedAt: new Date(),
+        createdAt: new Date(),
+      });
       prisma.rentalApplication.findFirst.mockResolvedValue(null);
       prisma.rentalApplication.create.mockResolvedValue(mockApplication);
       prisma.user.findUnique.mockResolvedValue({ fullName: 'Tenant Name' });
@@ -126,10 +141,26 @@ describe('ApplicationsService', () => {
 
     it('rejects duplicate active application', async () => {
       prisma.property.findUnique.mockResolvedValue(mockProperty);
+      prisma.visitRequest.findUnique.mockResolvedValue({
+        id: 'visit-1',
+        tenantId: 'tenant-1',
+        propertyId: 'prop-1',
+        status: VisitStatus.COMPLETED,
+        visitVerifiedAt: new Date(),
+        createdAt: new Date(),
+      });
       prisma.rentalApplication.findFirst.mockResolvedValue({ id: 'existing' });
       await expect(service.create('prop-1', 'tenant-1', dto as any)).rejects.toThrow(
         'already have an active application',
       );
+    });
+
+    it('rejects application without verified visit', async () => {
+      prisma.property.findUnique.mockResolvedValue(mockProperty);
+      prisma.rentalApplication.findFirst.mockResolvedValue(null);
+      await expect(
+        service.create('prop-1', 'tenant-1', { ...dto, verifiedVisitId: undefined } as any),
+      ).rejects.toThrow('A verified visit is required');
     });
 
     it('validates verified visit belongs to tenant and property', async () => {
@@ -407,10 +438,12 @@ describe('ApplicationsService', () => {
             update: vi.fn().mockResolvedValue({
               ...mockApplication,
               status: ApplicationStatus.SELECTED,
+              paymentDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000),
               property: mockProperty,
               tenant: { id: 'tenant-1', fullName: 'T', email: 't@e.com' },
             }),
             updateMany: vi.fn(),
+            findMany: vi.fn().mockResolvedValue([]),
           },
           property: { update: vi.fn() },
           visitRequest: {
@@ -422,7 +455,7 @@ describe('ApplicationsService', () => {
         return tx;
       };
 
-      it('selects application, marks property rented, notifies tenant', async () => {
+      it('selects application, sets payment deadline, waitlists others, notifies tenant', async () => {
         prisma.rentalApplication.findUnique.mockResolvedValue(mockApplication);
         const tx = setupSelectedTx();
 
@@ -431,16 +464,26 @@ describe('ApplicationsService', () => {
         } as any);
 
         expect(result.status).toBe(ApplicationStatus.SELECTED);
-        expect(tx.property.update).toHaveBeenCalledWith({
-          where: { id: 'prop-1' },
-          data: { status: PropertyStatus.RENTED },
+        expect(result.paymentDeadline).toBeDefined();
+        expect(tx.rentalApplication.updateMany).toHaveBeenCalledWith({
+          where: expect.objectContaining({
+            propertyId: 'prop-1',
+            id: { not: 'app-1' },
+            status: {
+              in: [
+                ApplicationStatus.SUBMITTED,
+                ApplicationStatus.UNDER_REVIEW,
+                ApplicationStatus.SHORTLISTED,
+              ],
+            },
+          }),
+          data: { status: ApplicationStatus.WAITLISTED },
         });
-        expect(tx.rentalApplication.updateMany).toHaveBeenCalled();
         expect(notificationsService.create).toHaveBeenCalledWith(
           'tenant-1',
           expect.any(String),
           'Application Selected',
-          expect.any(String),
+          expect.stringContaining('48 hours'),
           expect.any(Object),
         );
         expect(emailQueueService.queueNotificationEmail).toHaveBeenCalledWith(
@@ -450,21 +493,20 @@ describe('ApplicationsService', () => {
         );
       });
 
-      it('cancels pending visits and notifies their tenants', async () => {
+      it('notifies waitlisted applicants', async () => {
         prisma.rentalApplication.findUnique.mockResolvedValue(mockApplication);
         const tx = setupSelectedTx();
-        tx.visitRequest.findMany.mockResolvedValue([
-          { id: 'v1', tenantId: 'visitor-1' },
-          { id: 'v2', tenantId: 'visitor-2' },
+        tx.rentalApplication.findMany.mockResolvedValue([
+          { tenantId: 'waitlisted-1' },
+          { tenantId: 'waitlisted-2' },
         ]);
 
         await service.updateStatus('app-1', 'landlord-1', ['LANDLORD'], {
           status: ApplicationStatus.SELECTED,
         } as any);
 
-        expect(tx.visitRequest.updateMany).toHaveBeenCalled();
         expect(notificationsService.create).toHaveBeenCalledTimes(3);
-        expect(emailQueueService.queueNotificationEmail).toHaveBeenCalledTimes(3);
+        expect(emailQueueService.queueNotificationEmail).toHaveBeenCalledTimes(1);
       });
     });
   });

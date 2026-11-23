@@ -1,14 +1,18 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EscrowActionDto, ReleaseEscrowDto, RefundEscrowDto, DisputeEscrowDto, EscrowResponseDto } from './dto/escrow.dto.js';
 import { EscrowStatus, PaymentStatus, PaymentType } from '@prisma/client';
+import { LedgerService, LedgerAccountType, LedgerEntryType } from '../payments/ledger.service.js';
+import type { PaymentProvider } from '../payments/providers/payment-provider.interface.js';
+import { WORKFLOW_CONFIG } from '../config/workflow.config.js';
 
 @Injectable()
 export class EscrowService {
-  private readonly PLATFORM_FEE_PERCENTAGE = 2.9;
-  private readonly PLATFORM_FEE_FIXED = 0.30;
-
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private ledgerService: LedgerService,
+    @Inject('PAYMENT_PROVIDER') private paymentProvider: PaymentProvider,
+  ) {}
 
   async getEscrowStatus(paymentId: string): Promise<EscrowResponseDto> {
     const payment = await this.prisma.payment.findUnique({
@@ -75,6 +79,15 @@ export class EscrowService {
       },
     });
 
+    // Record ledger entries for escrow release
+    if (payment.application?.tenantId && payment.application?.property?.landlordId) {
+      await this.ledgerService.recordRelease(
+        payment.id,
+        Number(payment.amount),
+        payment.application.property.landlordId,
+      );
+    }
+
     await this.prisma.notification.create({
       data: {
         userId: payment.application?.tenantId,
@@ -118,6 +131,15 @@ export class EscrowService {
         status: PaymentStatus.REFUNDED,
       },
     });
+
+    // Record ledger entries for escrow refund
+    if (payment.application?.tenantId) {
+      await this.ledgerService.recordRefund(
+        payment.id,
+        Number(payment.amount),
+        payment.application.tenantId,
+      );
+    }
 
     if (isTenant) {
       await this.prisma.notification.create({
@@ -283,7 +305,14 @@ export class EscrowService {
   }
 
   private calculatePlatformFee(amount: number): number {
-    return (amount * this.PLATFORM_FEE_PERCENTAGE / 100) + this.PLATFORM_FEE_FIXED;
+    // Amount is in BDT, fee config is in poisha
+    // Convert amount to poisha, calculate fee, convert back to BDT
+    const amountInPoisha = amount * 100;
+    const feeBasisPoints = WORKFLOW_CONFIG.escrow.platformFeeRateBasisPoints;
+    const fixedFeePoisha = WORKFLOW_CONFIG.escrow.platformFeeFixedPoisha;
+
+    const feeInPoisha = Math.floor((amountInPoisha * feeBasisPoints) / 10000) + fixedFeePoisha;
+    return feeInPoisha / 100; // Convert back to BDT
   }
 
   private async isUserAdmin(userId: string): Promise<boolean> {

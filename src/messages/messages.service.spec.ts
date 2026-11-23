@@ -160,7 +160,7 @@ describe('MessagesService', () => {
       const conv2 = result.find((c) => c.userId === 'user-3');
       expect(conv1.user.fullName).toBe('Receiver');
       expect(conv2.user.fullName).toBe('Other');
-      expect(conv2.unreadCount).toBe(0);
+      expect(conv2.unreadCount).toBe(1);
     });
 
     it('counts unread messages from other users', async () => {
@@ -189,7 +189,7 @@ describe('MessagesService', () => {
       const result = await service.getConversations('user-1');
 
       expect(result).toHaveLength(1);
-      expect(result[0].unreadCount).toBe(1);
+      expect(result[0].unreadCount).toBe(2);
     });
 
     it('returns empty array for no messages', async () => {

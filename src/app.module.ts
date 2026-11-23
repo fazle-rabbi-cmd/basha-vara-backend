@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CommonModule } from './common/common.module.js';
 import { HealthModule } from './health/health.module.js';
@@ -20,6 +21,11 @@ import { EscrowModule } from './escrow/escrow.module.js';
 import { PoliceVerificationModule } from './police-verification/police-verification.module.js';
 import { RentLedgerModule } from './rent-ledger/rent-ledger.module.js';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module.js';
+import { WebSocketsModule } from './websockets/websockets.module.js';
+import { PgBossModule } from './pg-boss/pg-boss.module.js';
+import { TrustModule } from './trust/trust.module.js';
+import { ObservabilityModule } from './observability/observability.module.js';
+import { SecurityModule } from './security/security.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 
@@ -29,6 +35,12 @@ import { AppService } from './app.service.js';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
     CommonModule,
     PrismaModule,
     HealthModule,
@@ -49,6 +61,11 @@ import { AppService } from './app.service.js';
     PoliceVerificationModule,
     RentLedgerModule,
     PushNotificationsModule,
+    WebSocketsModule,
+    PgBossModule,
+    TrustModule,
+    ObservabilityModule,
+    SecurityModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter.js';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 // @ts-ignore - compression module types are available but not recognized by nodenext
 import compression from 'compression';
@@ -15,6 +16,10 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
   logger.log('NestJS application created successfully');
+
+  // WebSocket Adapter
+  app.useWebSocketAdapter(new IoAdapter(app));
+  logger.log('WebSocket adapter configured');
 
   // Enable gzip compression for faster responses
   app.use(compression());

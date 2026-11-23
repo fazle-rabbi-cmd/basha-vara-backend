@@ -22,6 +22,7 @@ export class MessagesService {
             id: true,
             fullName: true,
             email: true,
+            avatarUrl: true,
           },
         },
         receiver: {
@@ -29,6 +30,7 @@ export class MessagesService {
             id: true,
             fullName: true,
             email: true,
+            avatarUrl: true,
           },
         },
         property: {
@@ -70,6 +72,7 @@ export class MessagesService {
             id: true,
             fullName: true,
             email: true,
+            avatarUrl: true,
           },
         },
         receiver: {
@@ -77,6 +80,7 @@ export class MessagesService {
             id: true,
             fullName: true,
             email: true,
+            avatarUrl: true,
           },
         },
         property: {
@@ -108,6 +112,7 @@ export class MessagesService {
             id: true,
             fullName: true,
             email: true,
+            avatarUrl: true,
           },
         },
         receiver: {
@@ -115,6 +120,7 @@ export class MessagesService {
             id: true,
             fullName: true,
             email: true,
+            avatarUrl: true,
           },
         },
         property: {
@@ -142,10 +148,11 @@ export class MessagesService {
             id: otherUser.id,
             fullName: otherUser.fullName,
             email: otherUser.email,
+            avatarUrl: otherUser.avatarUrl,
           },
           property: message.property,
           lastMessage: this.mapToResponse(message),
-          unreadCount: 0,
+          unreadCount: message.receiverId === userId && !message.isRead ? 1 : 0,
         });
       } else {
         const conversation = conversationMap.get(otherUserId);
@@ -202,11 +209,13 @@ export class MessagesService {
         id: message.sender.id,
         fullName: message.sender.fullName,
         email: message.sender.email,
+        avatarUrl: message.sender.avatarUrl,
       } : undefined,
       receiver: message.receiver ? {
         id: message.receiver.id,
         fullName: message.receiver.fullName,
         email: message.receiver.email,
+        avatarUrl: message.receiver.avatarUrl,
       } : undefined,
       property: message.property ? {
         id: message.property.id,

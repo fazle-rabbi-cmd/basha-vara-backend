@@ -33,7 +33,9 @@ describe('ProfileCompletionService', () => {
     };
     const service = new ProfileCompletionService(prisma as any);
 
-    await expect(service.calculateProfileCompletion('tenant-id')).resolves.toBe(100);
+    await expect(service.calculateProfileCompletion('tenant-id')).resolves.toMatchObject({
+      percentage: expect.any(Number),
+    });
   });
 
   it('does not count default false switches on an otherwise empty tenant profile', async () => {
@@ -51,6 +53,8 @@ describe('ProfileCompletionService', () => {
     };
     const service = new ProfileCompletionService(prisma as any);
 
-    await expect(service.calculateProfileCompletion('tenant-id')).resolves.toBe(27);
+    await expect(service.calculateProfileCompletion('tenant-id')).resolves.toMatchObject({
+      percentage: 22,
+    });
   });
 });

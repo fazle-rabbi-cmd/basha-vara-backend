@@ -89,7 +89,7 @@ export class ContactInfoGuard implements CanActivate {
               { tenantId: userId, property: { landlordId: targetUserId } },
               { tenantId: targetUserId, property: { landlordId: userId } },
             ],
-            status: 'ACCEPTED',
+            status: { in: ['ACCEPTED', 'CONFIRMED', 'COMPLETED'] },
           },
         });
         return !!visit;

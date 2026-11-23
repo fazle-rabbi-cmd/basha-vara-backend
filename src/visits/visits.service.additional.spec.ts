@@ -6,13 +6,15 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { NotificationEmailQueueService } from '../email/notification-email-queue.service.js';
 import { NotificationDigestService } from '../email/notification-digest.service.js';
 import { OtpService } from '../common/services/otp.service.js';
+import { WorkflowAuditService } from '../common/services/workflow-audit.service.js';
+import { IcsGeneratorService } from './services/ics-generator.service.js';
+import { VisitReminderWorker } from './visit-reminder.worker.js';
+import { VisitAutoExpireWorker } from './visit-auto-expire.worker.js';
+import { TokenHoldWorker } from './token-hold.worker.js';
 
 describe('VisitsService - Additional Tests', () => {
   let service: VisitsService;
   let prisma: any;
-  let notificationsService: any;
-  let emailQueueService: any;
-  let digestService: any;
   let otpService: any;
 
   beforeEach(async () => {
@@ -24,6 +26,7 @@ describe('VisitsService - Additional Tests', () => {
         create: vi.fn(),
         update: vi.fn(),
         updateMany: vi.fn(),
+        count: vi.fn(),
       },
       property: {
         findUnique: vi.fn(),
@@ -39,6 +42,12 @@ describe('VisitsService - Additional Tests', () => {
       escrow: {
         create: vi.fn(),
       },
+      propertyAvailabilityWindow: {
+        findMany: vi.fn(),
+        deleteMany: vi.fn(),
+        createMany: vi.fn(),
+      },
+      $transaction: vi.fn((cb) => cb(mockPrisma)),
     };
 
     const mockNotificationsService = {
@@ -57,6 +66,28 @@ describe('VisitsService - Additional Tests', () => {
       generateOtp: vi.fn(),
       verifyOtp: vi.fn(),
       getOtpExpiryTime: vi.fn(),
+    };
+
+    const mockAuditService = {
+      logTransition: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    };
+
+    const mockIcsService = {
+      generateIcs: vi.fn().mockReturnValue('BEGIN:VCALENDAR\nEND:VCALENDAR'),
+    };
+
+    const mockVisitReminderWorker = {
+      scheduleReminders: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockVisitAutoExpireWorker = {
+      scheduleSingleExpire: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockTokenHoldWorker = {
+      scheduleExpiry: vi.fn().mockResolvedValue(undefined),
+      handleLandlordSideCancellation: vi.fn().mockResolvedValue(undefined),
+      handleTenantWalkaway: vi.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -82,14 +113,31 @@ describe('VisitsService - Additional Tests', () => {
           provide: OtpService,
           useValue: mockOtpService,
         },
+        {
+          provide: WorkflowAuditService,
+          useValue: mockAuditService,
+        },
+        {
+          provide: IcsGeneratorService,
+          useValue: mockIcsService,
+        },
+        {
+          provide: VisitReminderWorker,
+          useValue: mockVisitReminderWorker,
+        },
+        {
+          provide: VisitAutoExpireWorker,
+          useValue: mockVisitAutoExpireWorker,
+        },
+        {
+          provide: TokenHoldWorker,
+          useValue: mockTokenHoldWorker,
+        },
       ],
     }).compile();
 
     service = module.get<VisitsService>(VisitsService);
     prisma = module.get(PrismaService);
-    notificationsService = module.get(NotificationsService);
-    emailQueueService = module.get(NotificationEmailQueueService);
-    digestService = module.get(NotificationDigestService);
     otpService = module.get(OtpService);
   });
 
@@ -360,7 +408,7 @@ describe('VisitsService - Additional Tests', () => {
   });
 
   describe('verifyOtp', () => {
-    it('should verify OTP successfully', async () => {
+    it('should verify OTP successfully when landlord enters tenant code', async () => {
       const mockVisit = {
         id: 'visit-1',
         tenantId: 'tenant-1',
@@ -385,10 +433,41 @@ describe('VisitsService - Additional Tests', () => {
       otpService.verifyOtp.mockReturnValue(true);
       prisma.visitRequest.update.mockResolvedValue({ ...mockVisit, tenantOtpVerifiedAt: new Date() });
 
-      const result = await service.verifyOtp('visit-1', 'tenant-1', 'tenant', '123456');
+      const result = await service.verifyOtp('visit-1', 'landlord-1', 'landlord', '123456');
 
       expect(result).toHaveProperty('tenantOtpVerifiedAt');
       expect(otpService.verifyOtp).toHaveBeenCalledWith(`visit-1-tenant`, '123456');
+    });
+
+    it('should verify OTP successfully when tenant enters landlord code (self check-in)', async () => {
+      const mockVisit = {
+        id: 'visit-1',
+        tenantId: 'tenant-1',
+        propertyId: 'prop-1',
+        requestedDate: new Date(),
+        requestedTime: '10:00',
+        status: 'ACCEPTED',
+        visitType: 'IN_PERSON',
+        guestCount: 1,
+        contactPhone: null,
+        message: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        property: {
+          id: 'prop-1',
+          title: 'Test Property',
+          landlordId: 'landlord-1',
+        },
+      };
+
+      prisma.visitRequest.findUnique.mockResolvedValue(mockVisit);
+      otpService.verifyOtp.mockReturnValue(true);
+      prisma.visitRequest.update.mockResolvedValue({ ...mockVisit, landlordOtpVerifiedAt: new Date() });
+
+      const result = await service.verifyOtp('visit-1', 'tenant-1', 'tenant', '654321');
+
+      expect(result).toHaveProperty('landlordOtpVerifiedAt');
+      expect(otpService.verifyOtp).toHaveBeenCalledWith(`visit-1-landlord`, '654321');
     });
 
     it('should reject invalid OTP', async () => {
@@ -415,7 +494,7 @@ describe('VisitsService - Additional Tests', () => {
       prisma.visitRequest.findUnique.mockResolvedValue(mockVisit);
       otpService.verifyOtp.mockReturnValue(false);
 
-      await expect(service.verifyOtp('visit-1', 'tenant-1', 'tenant', '000000'))
+      await expect(service.verifyOtp('visit-1', 'landlord-1', 'landlord', '000000'))
         .rejects.toThrow('Invalid or expired OTP');
     });
   });

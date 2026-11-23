@@ -42,11 +42,13 @@ export class MessageResponseDto {
     id: string;
     fullName: string;
     email: string;
+    avatarUrl?: string;
   };
   receiver?: {
     id: string;
     fullName: string;
     email: string;
+    avatarUrl?: string;
   };
   property?: {
     id: string;
