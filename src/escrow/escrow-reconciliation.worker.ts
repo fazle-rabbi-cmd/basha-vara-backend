@@ -15,8 +15,10 @@ export class EscrowReconciliationWorker {
   ) {}
 
   async onModuleInit() {
-    this.pgBoss.work('escrow-reconciliation', async (job) => {
-      await this.performReconciliation();
+    this.pgBoss.work('escrow-reconciliation', async (jobs: unknown[]) => {
+      for (const _job of jobs) {
+        await this.performReconciliation();
+      }
     });
 
     this.logger.log('Escrow reconciliation worker registered');

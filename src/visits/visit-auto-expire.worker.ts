@@ -16,12 +16,16 @@ export class VisitAutoExpireWorker {
   ) {}
 
   async onModuleInit() {
-    this.pgBoss.work('visit-auto-expire', async (job) => {
-      await this.processAutoExpire();
+    this.pgBoss.work('visit-auto-expire', async (jobs: unknown[]) => {
+      for (const _job of jobs) {
+        await this.processAutoExpire();
+      }
     });
 
-    this.pgBoss.work('visit-single-expire', async (job) => {
-      await this.processSingleExpire(job.data.visitId);
+    this.pgBoss.work('visit-single-expire', async (jobs: { data: { visitId: string } }[]) => {
+      for (const job of jobs) {
+        await this.processSingleExpire(job.data.visitId);
+      }
     });
 
     this.logger.log('Visit auto-expire worker registered');

@@ -18,12 +18,16 @@ export class ApplicationPaymentDeadlineWorker {
   ) {}
 
   async onModuleInit() {
-    this.pgBoss.work('application-payment-deadline', async (job) => {
-      await this.processPaymentDeadline(job.data.applicationId);
+    this.pgBoss.work('application-payment-deadline', async (jobs: { data: { applicationId: string } }[]) => {
+      for (const job of jobs) {
+        await this.processPaymentDeadline(job.data.applicationId);
+      }
     });
 
-    this.pgBoss.work('application-payment-deadline-check', async (job) => {
-      await this.checkExpiredDeadlines();
+    this.pgBoss.work('application-payment-deadline-check', async (jobs: unknown[]) => {
+      for (const _job of jobs) {
+        await this.checkExpiredDeadlines();
+      }
     });
 
     this.logger.log('Application payment deadline worker registered');

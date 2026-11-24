@@ -23,12 +23,16 @@ export class TokenHoldWorker {
   ) {}
 
   async onModuleInit() {
-    this.pgBoss.work('token-hold-expire', async (job) => {
-      await this.processTokenHoldExpiry(job.data.visitId);
+    this.pgBoss.work('token-hold-expire', async (jobs: { data: { visitId: string } }[]) => {
+      for (const job of jobs) {
+        await this.processTokenHoldExpiry(job.data.visitId);
+      }
     });
 
-    this.pgBoss.work('token-hold-check', async (job) => {
-      await this.checkExpiredTokenHolds();
+    this.pgBoss.work('token-hold-check', async (jobs: unknown[]) => {
+      for (const _job of jobs) {
+        await this.checkExpiredTokenHolds();
+      }
     });
 
     this.logger.log('Token hold worker registered');

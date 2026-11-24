@@ -22,7 +22,7 @@ export class NotificationEmailWorkerService implements OnModuleInit, OnModuleDes
     private readonly pgBoss: PgBossService,
   ) {}
 
-  onModuleInit() {
+  async onModuleInit() {
     const emailFrom = this.config.get<string>('EMAIL_FROM');
     this.brevoApiKey = this.config.get<string>('BREVO_API_KEY')?.trim() || undefined;
     const host = this.config.get<string>('SMTP_HOST');
@@ -47,8 +47,19 @@ export class NotificationEmailWorkerService implements OnModuleInit, OnModuleDes
       });
     }
 
-    this.pgBoss.work(NOTIFICATION_EMAIL_QUEUE, async (job: { data: NotificationEmailJob }) => {
-      await this.processEmail(job.data);
+    await this.pgBoss.work(NOTIFICATION_EMAIL_QUEUE, async (jobs: { data: NotificationEmailJob }[]) => {
+      for (const job of jobs) {
+        this.logger.log(`Notification email job picked up: ${JSON.stringify(job.data)}`);
+        try {
+          await this.processEmail(job.data);
+          this.logger.log(`Notification email processed for user ${job.data.userId}`);
+        } catch (error) {
+          this.logger.error(`Failed to process notification email for user ${job.data.userId}:`, error);
+          throw error;
+        }
+      }
+    }).then(() => {
+      this.logger.log(`Notification email worker registered on queue: ${NOTIFICATION_EMAIL_QUEUE}`);
     }).catch((error) => {
       this.logger.error(`Failed to register notification email worker: ${error.message}`);
     });

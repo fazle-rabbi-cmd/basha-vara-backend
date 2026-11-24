@@ -18,12 +18,16 @@ export class EscrowAutoReleaseWorker {
   ) {}
 
   async onModuleInit() {
-    this.pgBoss.work('escrow-auto-release', async (job) => {
-      await this.processAutoRelease(job.data.paymentId);
+    this.pgBoss.work('escrow-auto-release', async (jobs: { data: { paymentId: string } }[]) => {
+      for (const job of jobs) {
+        await this.processAutoRelease(job.data.paymentId);
+      }
     });
 
-    this.pgBoss.work('escrow-auto-release-check', async (job) => {
-      await this.checkAutoReleaseEligible();
+    this.pgBoss.work('escrow-auto-release-check', async (jobs: unknown[]) => {
+      for (const _job of jobs) {
+        await this.checkAutoReleaseEligible();
+      }
     });
 
     this.logger.log('Escrow auto-release worker registered');

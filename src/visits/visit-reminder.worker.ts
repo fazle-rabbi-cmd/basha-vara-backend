@@ -16,8 +16,10 @@ export class VisitReminderWorker {
   ) {}
 
   async onModuleInit() {
-    this.pgBoss.work('visit-reminder', async (job) => {
-      await this.processReminder(job.data);
+    this.pgBoss.work('visit-reminder', async (jobs: { data: { visitId: string; reminderHours: number } }[]) => {
+      for (const job of jobs) {
+        await this.processReminder(job.data);
+      }
     });
 
     this.logger.log('Visit reminder worker registered');
