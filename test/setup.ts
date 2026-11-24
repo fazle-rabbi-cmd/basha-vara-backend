@@ -10,9 +10,6 @@ beforeAll(async () => {
   process.env.DATABASE_URL = 'postgresql://basha_vara_user:test_password@localhost:5434/basha_vara_test';
   process.env.DIRECT_URL = 'postgresql://basha_vara_user:test_password@localhost:5434/basha_vara_test';
   
-  // Set test Redis URL
-  process.env.REDIS_URL = 'redis://localhost:6380';
-  
   // Set test JWT secrets
   process.env.JWT_SECRET = 'test_jwt_secret_for_testing_only';
   process.env.JWT_REFRESH_SECRET = 'test_refresh_secret_for_testing_only';

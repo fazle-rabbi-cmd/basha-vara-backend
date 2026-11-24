@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { vi } from 'vitest';
 import { NotificationEmailWorkerService } from './notification-email-worker.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import { ConfigService } from '@nestjs/config';
 
 describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
   let service: NotificationEmailWorkerService;
   let prisma: any;
   let configService: any;
+  let mockPgBoss: any;
 
   beforeEach(async () => {
     const mockPrisma = {
@@ -26,7 +28,6 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
           SMTP_PASS: 'test-password',
           SMTP_PORT: '587',
           SMTP_SECURE: 'false',
-          REDIS_URL: 'redis://localhost:6379',
           FRONTEND_URL: 'http://localhost:3000',
         };
         return config[key];
@@ -40,6 +41,10 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
       }),
     };
 
+    mockPgBoss = {
+      work: vi.fn().mockResolvedValue({}),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationEmailWorkerService,
@@ -50,6 +55,10 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: PgBossService,
+          useValue: mockPgBoss,
         },
       ],
     }).compile();
@@ -69,8 +78,7 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
 
       expect(service['brevoApiKey']).toBe('test-brevo-key');
       expect(service['transporter']).toBeUndefined();
-      expect(service['connection']).toBeDefined();
-      expect(service['worker']).toBeDefined();
+      expect(mockPgBoss.work).toHaveBeenCalled();
     });
 
     it('should initialize with SMTP when Brevo not configured', () => {
@@ -83,7 +91,6 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
           SMTP_PASS: 'test-password',
           SMTP_PORT: '587',
           SMTP_SECURE: 'false',
-          REDIS_URL: 'redis://localhost:6379',
           FRONTEND_URL: 'http://localhost:3000',
         };
         return config[key];
@@ -93,8 +100,7 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
 
       expect(service['brevoApiKey']).toBeUndefined();
       expect(service['transporter']).toBeDefined();
-      expect(service['connection']).toBeDefined();
-      expect(service['worker']).toBeDefined();
+      expect(mockPgBoss.work).toHaveBeenCalled();
     });
 
     it('should skip initialization when email not configured', () => {
@@ -107,7 +113,6 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
           SMTP_PASS: undefined,
           SMTP_PORT: '587',
           SMTP_SECURE: 'false',
-          REDIS_URL: 'redis://localhost:6379',
           FRONTEND_URL: 'http://localhost:3000',
         };
         return config[key];
@@ -117,39 +122,26 @@ describe('NotificationEmailWorkerService - Lifecycle Tests', () => {
 
       expect(service['brevoApiKey']).toBeUndefined();
       expect(service['transporter']).toBeUndefined();
-      expect(service['connection']).toBeUndefined();
-      expect(service['worker']).toBeUndefined();
+      expect(mockPgBoss.work).not.toHaveBeenCalled();
     });
   });
 
   describe('onModuleDestroy', () => {
-    it('should clean up resources', async () => {
-      // Initialize first
+    it('should clean up transporter', async () => {
       service.onModuleInit();
 
-      // Mock close methods
-      service['worker'] = {
-        close: vi.fn().mockResolvedValue(undefined),
-      } as any;
-      service['connection'] = {
-        quit: vi.fn().mockResolvedValue(undefined),
-      } as any;
       service['transporter'] = {
         close: vi.fn(),
       } as any;
 
       await service.onModuleDestroy();
 
-      expect(service['worker']?.close).toHaveBeenCalled();
-      expect(service['connection']?.quit).toHaveBeenCalled();
       expect(service['transporter']?.close).toHaveBeenCalled();
     });
 
     it('should handle cleanup when not initialized', async () => {
-      // Don't initialize
       await service.onModuleDestroy();
 
-      // Should not throw
       expect(true).toBe(true);
     });
   });

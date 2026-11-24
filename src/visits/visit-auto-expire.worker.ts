@@ -26,9 +26,7 @@ export class VisitAutoExpireWorker {
 
     this.logger.log('Visit auto-expire worker registered');
 
-    await this.pgBoss.schedule('visit-auto-expire', {}, {
-      cron: '0 * * * *',
-    });
+    await this.pgBoss.schedule('visit-auto-expire', '0 * * * *', {});
 
     this.logger.log('Scheduled hourly visit auto-expire job');
   }
@@ -110,9 +108,7 @@ export class VisitAutoExpireWorker {
     const expireTime = new Date(visit.createdAt.getTime() + WORKFLOW_CONFIG.visit.requestExpiryHours * 60 * 60 * 1000);
 
     if (expireTime > new Date()) {
-      await this.pgBoss.schedule('visit-single-expire', { visitId }, {
-        startAfter: expireTime,
-      });
+      await this.pgBoss.scheduleAfter('visit-single-expire', expireTime, { visitId });
       this.logger.log(`Scheduled single auto-expire for visit ${visitId} at ${expireTime.toISOString()}`);
     }
   }

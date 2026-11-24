@@ -10,7 +10,6 @@ dotenv.config({ path: envPath });
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://basha_vara_user:local_dev_password_change_me@localhost:5433/basha_vara_test?schema=public';
 process.env.DIRECT_URL = process.env.DIRECT_URL || 'postgresql://basha_vara_user:local_dev_password_change_me@localhost:5433/basha_vara_test?schema=public';
-process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test_jwt_secret_for_testing_only';
 process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test_refresh_secret_for_testing_only';
 process.env.EMAIL_FROM = process.env.EMAIL_FROM || 'test@example.com';

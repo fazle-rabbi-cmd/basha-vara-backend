@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { SystemPermission } from '@prisma/client';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import { RedisService } from '../services/redis.service.js';
+import { CacheService } from '../services/cache.service.js';
 import { AuditService } from '../services/audit.service.js';
 
 @Injectable()
@@ -11,7 +11,7 @@ export class PermissionsGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
-    private redis: RedisService,
+    private cache: CacheService,
     private audit: AuditService,
   ) {}
 
@@ -60,7 +60,7 @@ export class PermissionsGuard implements CanActivate {
 
   private async getUserPermissions(roles: string[]): Promise<SystemPermission[]> {
     const cacheKey = `user_permissions:${roles.join(',')}`;
-    const cached = await this.redis.get(cacheKey);
+    const cached = await this.cache.get(cacheKey);
 
     if (cached) {
       return JSON.parse(cached);
@@ -80,7 +80,7 @@ export class PermissionsGuard implements CanActivate {
     });
 
     const permissions = rolePermissions.map((rp) => rp.permission.name as SystemPermission);
-    await this.redis.set(cacheKey, JSON.stringify(permissions), 3600);
+    await this.cache.set(cacheKey, JSON.stringify(permissions), 3600);
 
     return permissions;
   }

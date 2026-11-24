@@ -1,24 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { vi } from 'vitest';
 import { AuthEmailQueueService } from './auth-email-queue.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import { AUTH_EMAIL_QUEUE } from './auth-email.types.js';
 
 describe('AuthEmailQueueService', () => {
   let service: AuthEmailQueueService;
-  let mockQueue: any;
+  let mockPgBoss: any;
 
   beforeEach(async () => {
-    mockQueue = {
-      add: vi.fn(),
-      close: vi.fn(),
+    mockPgBoss = {
+      send: vi.fn().mockResolvedValue('job-id-1'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthEmailQueueService,
         {
-          provide: AUTH_EMAIL_QUEUE,
-          useValue: mockQueue,
+          provide: PgBossService,
+          useValue: mockPgBoss,
         },
       ],
     }).compile();
@@ -31,21 +31,20 @@ describe('AuthEmailQueueService', () => {
   });
 
   describe('queueEmail', () => {
-    it('should queue auth email', async () => {
+    it('should queue auth email via pg-boss', async () => {
       await service.queueEmail('user-1', 'PASSWORD_RESET' as any);
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'PASSWORD_RESET',
+      expect(mockPgBoss.send).toHaveBeenCalledWith(
+        AUTH_EMAIL_QUEUE,
         {
           userId: 'user-1',
           purpose: 'PASSWORD_RESET',
         },
         expect.objectContaining({
-          jobId: expect.stringContaining('password_reset-user-1'),
-          attempts: 5,
-          backoff: { type: 'exponential', delay: 30_000 },
-          removeOnComplete: true,
-          removeOnFail: { age: 86_400 },
+          retryLimit: 5,
+          retryBackoff: true,
+          singletonKey: 'PASSWORD_RESET-user-1',
+          singletonSeconds: 60,
         })
       );
     });
@@ -53,8 +52,8 @@ describe('AuthEmailQueueService', () => {
     it('should queue different email types', async () => {
       await service.queueEmail('user-1', 'PASSWORD_SETUP' as any);
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'PASSWORD_SETUP',
+      expect(mockPgBoss.send).toHaveBeenCalledWith(
+        AUTH_EMAIL_QUEUE,
         expect.objectContaining({
           userId: 'user-1',
           purpose: 'PASSWORD_SETUP',
@@ -68,22 +67,14 @@ describe('AuthEmailQueueService', () => {
     it('should queue password link email', async () => {
       await service.queuePasswordLink('user-1', 'PASSWORD_RESET' as any);
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'PASSWORD_RESET',
+      expect(mockPgBoss.send).toHaveBeenCalledWith(
+        AUTH_EMAIL_QUEUE,
         expect.objectContaining({
           userId: 'user-1',
           purpose: 'PASSWORD_RESET',
         }),
         expect.any(Object)
       );
-    });
-  });
-
-  describe('onModuleDestroy', () => {
-    it('should close queue on module destroy', async () => {
-      await service.onModuleDestroy();
-
-      expect(mockQueue.close).toHaveBeenCalled();
     });
   });
 });

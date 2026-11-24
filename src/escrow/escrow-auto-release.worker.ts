@@ -29,18 +29,14 @@ export class EscrowAutoReleaseWorker {
     this.logger.log('Escrow auto-release worker registered');
 
     // Schedule hourly check for auto-release eligible payments
-    await this.pgBoss.schedule('escrow-auto-release-check', {}, {
-      cron: '0 * * * *',
-    });
+    await this.pgBoss.schedule('escrow-auto-release-check', '0 * * * *', {});
 
     this.logger.log('Scheduled hourly auto-release check');
   }
 
   async scheduleAutoRelease(paymentId: string, releaseTime: Date) {
     if (releaseTime > new Date()) {
-      await this.pgBoss.schedule('escrow-auto-release', { paymentId }, {
-        startAfter: releaseTime,
-      });
+      await this.pgBoss.scheduleAfter('escrow-auto-release', releaseTime, { paymentId });
       this.logger.log(`Scheduled auto-release for payment ${paymentId} at ${releaseTime.toISOString()}`);
     }
   }

@@ -34,18 +34,14 @@ export class TokenHoldWorker {
     this.logger.log('Token hold worker registered');
 
     // Schedule hourly check for expired token holds
-    await this.pgBoss.schedule('token-hold-check', {}, {
-      cron: '0 * * * *',
-    });
+    await this.pgBoss.schedule('token-hold-check', '0 * * * *', {});
 
     this.logger.log('Scheduled hourly token hold check');
   }
 
   async scheduleExpiry(visitId: string, expiryTime: Date) {
     if (expiryTime > new Date()) {
-      await this.pgBoss.schedule('token-hold-expire', { visitId }, {
-        startAfter: expiryTime,
-      });
+      await this.pgBoss.scheduleAfter('token-hold-expire', expiryTime, { visitId });
       this.logger.log(`Scheduled token hold expiry for visit ${visitId} at ${expiryTime.toISOString()}`);
     }
   }

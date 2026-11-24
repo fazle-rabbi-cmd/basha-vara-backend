@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { vi } from 'vitest';
 import { AuthEmailWorkerService } from './auth-email-worker.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import { ConfigService } from '@nestjs/config';
 
 describe('AuthEmailWorkerService - Lifecycle', () => {
   let service: AuthEmailWorkerService;
   let prisma: any;
   let configService: any;
+  let mockPgBoss: any;
   let configValues: Record<string, string | undefined>;
 
   const buildService = async () => {
@@ -30,11 +32,16 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
       }),
     };
 
+    mockPgBoss = {
+      work: vi.fn().mockResolvedValue({}),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthEmailWorkerService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: PgBossService, useValue: mockPgBoss },
       ],
     }).compile();
 
@@ -52,7 +59,6 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
       configValues = {
         EMAIL_FROM: 'test@example.com',
         BREVO_API_KEY: 'test-brevo-key',
-        REDIS_URL: 'redis://localhost:6379',
       };
       await buildService();
 
@@ -60,8 +66,7 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
 
       expect(service['brevoApiKey']).toBe('test-brevo-key');
       expect(service['transporter']).toBeUndefined();
-      expect(service['connection']).toBeDefined();
-      expect(service['worker']).toBeDefined();
+      expect(mockPgBoss.work).toHaveBeenCalled();
     });
 
     it('should initialize with SMTP when Brevo not configured', async () => {
@@ -72,7 +77,6 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
         SMTP_PASS: 'test-password',
         SMTP_PORT: '587',
         SMTP_SECURE: 'false',
-        REDIS_URL: 'redis://localhost:6379',
       };
       await buildService();
 
@@ -80,14 +84,12 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
 
       expect(service['brevoApiKey']).toBeUndefined();
       expect(service['transporter']).toBeDefined();
-      expect(service['connection']).toBeDefined();
-      expect(service['worker']).toBeDefined();
+      expect(mockPgBoss.work).toHaveBeenCalled();
     });
 
     it('should throw when EMAIL_FROM missing', async () => {
       configValues = {
         BREVO_API_KEY: 'test-brevo-key',
-        REDIS_URL: 'redis://localhost:6379',
       };
       await buildService();
 
@@ -97,7 +99,6 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
     it('should throw when neither Brevo nor SMTP configured', async () => {
       configValues = {
         EMAIL_FROM: 'test@example.com',
-        REDIS_URL: 'redis://localhost:6379',
       };
       await buildService();
 
@@ -106,23 +107,18 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
   });
 
   describe('onModuleDestroy', () => {
-    it('should clean up resources', async () => {
+    it('should clean up transporter', async () => {
       configValues = {
         EMAIL_FROM: 'test@example.com',
         BREVO_API_KEY: 'test-brevo-key',
-        REDIS_URL: 'redis://localhost:6379',
       };
       await buildService();
       service.onModuleInit();
 
-      service['worker'] = { close: vi.fn().mockResolvedValue(undefined) } as any;
-      service['connection'] = { quit: vi.fn().mockResolvedValue(undefined) } as any;
       service['transporter'] = { close: vi.fn() } as any;
 
       await service.onModuleDestroy();
 
-      expect(service['worker']?.close).toHaveBeenCalled();
-      expect(service['connection']?.quit).toHaveBeenCalled();
       expect(service['transporter']?.close).toHaveBeenCalled();
     });
 

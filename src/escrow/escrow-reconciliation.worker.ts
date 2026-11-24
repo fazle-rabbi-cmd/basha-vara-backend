@@ -22,9 +22,7 @@ export class EscrowReconciliationWorker {
     this.logger.log('Escrow reconciliation worker registered');
 
     // Schedule daily reconciliation at 2 AM
-    await this.pgBoss.schedule('escrow-reconciliation', {}, {
-      cron: '0 2 * * *',
-    });
+    await this.pgBoss.schedule('escrow-reconciliation', '0 2 * * *', {});
 
     this.logger.log('Scheduled daily reconciliation at 2 AM');
   }

@@ -1,12 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserStatus } from '@prisma/client';
-import { Worker } from 'bullmq';
 import { createHash, randomBytes } from 'node:crypto';
-import { Redis } from 'ioredis';
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import {
   AUTH_ACTION_TOKEN_PURPOSE,
   AUTH_EMAIL_PURPOSE,
@@ -17,14 +16,13 @@ import {
 @Injectable()
 export class AuthEmailWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AuthEmailWorkerService.name);
-  private connection?: Redis;
-  private worker?: Worker<AuthEmailJob>;
   private transporter?: Transporter;
   private brevoApiKey?: string;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly pgBoss: PgBossService,
   ) {}
 
   onModuleInit() {
@@ -53,24 +51,16 @@ export class AuthEmailWorkerService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    this.connection = new Redis(
-      this.config.get<string>('REDIS_URL') ?? 'redis://127.0.0.1:6379',
-      { maxRetriesPerRequest: null },
-    );
-    this.worker = new Worker(
-      AUTH_EMAIL_QUEUE,
-      (job) => this.processEmail(job.data),
-      { connection: this.connection, concurrency: 5 },
-    );
-    this.worker.on('failed', (job, error) => {
-      this.logger.error(`Auth email job ${job?.id ?? 'unknown'} failed: ${error.message}`);
+    this.pgBoss.work(AUTH_EMAIL_QUEUE, async (job: { data: AuthEmailJob }) => {
+      await this.processEmail(job.data);
+    }).catch((error) => {
+      this.logger.error(`Failed to register auth email worker: ${error.message}`);
     });
+
     this.logger.log(`Auth email worker started with ${this.brevoApiKey ? 'Brevo' : 'SMTP'} delivery`);
   }
 
   async onModuleDestroy() {
-    await this.worker?.close();
-    await this.connection?.quit();
     this.transporter?.close();
   }
 

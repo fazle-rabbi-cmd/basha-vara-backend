@@ -101,6 +101,13 @@ export class CreatePropertyDto {
   @IsInt()
   totalFloors?: number;
 
+  @ApiPropertyOptional({ example: 2, description: 'Number of balconies' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  balconyCount?: number;
+
   @ApiProperty({ example: 'House 42, Road 8A, Dhanmondi' })
   @IsString()
   @IsNotEmpty()

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { vi } from 'vitest';
 import { AuthEmailWorkerService } from './auth-email-worker.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import { ConfigService } from '@nestjs/config';
 import { UserStatus } from '@prisma/client';
 import { AUTH_ACTION_TOKEN_PURPOSE, AUTH_EMAIL_PURPOSE } from './auth-email.types.js';
@@ -40,7 +41,6 @@ describe('AuthEmailWorkerService', () => {
           SMTP_PASS: 'test-password',
           SMTP_PORT: '587',
           SMTP_SECURE: 'false',
-          REDIS_URL: 'redis://localhost:6379',
           FRONTEND_URL: 'http://localhost:3000',
         };
         return config[key];
@@ -64,6 +64,10 @@ describe('AuthEmailWorkerService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: PgBossService,
+          useValue: { work: vi.fn() },
         },
       ],
     }).compile();

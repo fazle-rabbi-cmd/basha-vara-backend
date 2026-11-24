@@ -1,5 +1,5 @@
-import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Injectable } from '@nestjs/common';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import {
   AUTH_EMAIL_QUEUE,
   type AuthEmailJob,
@@ -7,24 +7,23 @@ import {
 } from './auth-email.types.js';
 
 @Injectable()
-export class AuthEmailQueueService implements OnModuleDestroy {
-  constructor(@Inject(AUTH_EMAIL_QUEUE) private readonly queue: Queue<AuthEmailJob>) {}
+export class AuthEmailQueueService {
+  constructor(private readonly pgBoss: PgBossService) {}
 
   async queueEmail(userId: string, purpose: AuthEmailPurpose) {
-    await this.queue.add(purpose, { userId, purpose }, {
-      jobId: `${purpose.toLowerCase()}-${userId}-${Math.floor(Date.now() / 60_000)}`,
-      attempts: 5,
-      backoff: { type: 'exponential', delay: 30_000 },
-      removeOnComplete: true,
-      removeOnFail: { age: 86_400 },
+    const job: AuthEmailJob = { userId, purpose };
+    await this.pgBoss.send(AUTH_EMAIL_QUEUE, job, {
+      retryLimit: 5,
+      retryDelay: 30,
+      retryBackoff: true,
+      retryDelayMax: 3600,
+      singletonKey: `${purpose}-${userId}`,
+      singletonSeconds: 60,
+      deleteAfterSeconds: 86400,
     });
   }
 
   async queuePasswordLink(userId: string, purpose: AuthEmailPurpose) {
     return this.queueEmail(userId, purpose);
-  }
-
-  async onModuleDestroy() {
-    await this.queue.close();
   }
 }

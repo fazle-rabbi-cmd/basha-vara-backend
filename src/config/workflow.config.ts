@@ -63,11 +63,19 @@ export interface VerificationWorkflowConfig {
   gpsSoftThresholdMeters: number;
 }
 
+export interface JobsWorkflowConfig {
+  /** Minutes between failed job monitoring checks */
+  failureCheckIntervalMinutes: number;
+  /** Hours of failed job history to include in each alert */
+  failureLookbackHours: number;
+}
+
 export interface WorkflowConfig {
   visit: VisitWorkflowConfig;
   verification: VerificationWorkflowConfig;
   application: ApplicationWorkflowConfig;
   escrow: EscrowWorkflowConfig;
+  jobs: JobsWorkflowConfig;
 }
 
 export const WORKFLOW_CONFIG: WorkflowConfig = {
@@ -102,5 +110,9 @@ export const WORKFLOW_CONFIG: WorkflowConfig = {
     sandboxMode: true,
     enabled: true,
     legalReviewRequired: true,
+  },
+  jobs: {
+    failureCheckIntervalMinutes: 60,
+    failureLookbackHours: 24,
   },
 };

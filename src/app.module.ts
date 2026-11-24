@@ -23,6 +23,7 @@ import { RentLedgerModule } from './rent-ledger/rent-ledger.module.js';
 import { PushNotificationsModule } from './push-notifications/push-notifications.module.js';
 import { WebSocketsModule } from './websockets/websockets.module.js';
 import { PgBossModule } from './pg-boss/pg-boss.module.js';
+import { JobFailureMonitorService } from './pg-boss/job-failure-monitor.service.js';
 import { TrustModule } from './trust/trust.module.js';
 import { ObservabilityModule } from './observability/observability.module.js';
 import { SecurityModule } from './security/security.module.js';
@@ -68,6 +69,6 @@ import { AppService } from './app.service.js';
     SecurityModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, JobFailureMonitorService],
 })
 export class AppModule {}

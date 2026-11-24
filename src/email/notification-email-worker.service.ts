@@ -1,10 +1,9 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Worker } from 'bullmq';
-import { Redis } from 'ioredis';
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import {
   NOTIFICATION_EMAIL_QUEUE,
   type NotificationEmailJob,
@@ -14,14 +13,13 @@ import {
 @Injectable()
 export class NotificationEmailWorkerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificationEmailWorkerService.name);
-  private connection?: Redis;
-  private worker?: Worker<NotificationEmailJob>;
   private transporter?: Transporter;
   private brevoApiKey?: string;
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly pgBoss: PgBossService,
   ) {}
 
   onModuleInit() {
@@ -49,24 +47,15 @@ export class NotificationEmailWorkerService implements OnModuleInit, OnModuleDes
       });
     }
 
-    this.connection = new Redis(
-      this.config.get<string>('REDIS_URL') ?? 'redis://127.0.0.1:6379',
-      { maxRetriesPerRequest: null },
-    );
-    this.worker = new Worker(
-      NOTIFICATION_EMAIL_QUEUE,
-      (job) => this.processEmail(job.data),
-      { connection: this.connection, concurrency: 5 },
-    );
-    this.worker.on('failed', (job, error) => {
-      this.logger.error(`Notification email job ${job?.id ?? 'unknown'} failed: ${error.message}`);
+    this.pgBoss.work(NOTIFICATION_EMAIL_QUEUE, async (job: { data: NotificationEmailJob }) => {
+      await this.processEmail(job.data);
+    }).catch((error) => {
+      this.logger.error(`Failed to register notification email worker: ${error.message}`);
     });
     this.logger.log(`Notification email worker started with ${this.brevoApiKey ? 'Brevo' : 'SMTP'} delivery`);
   }
 
   async onModuleDestroy() {
-    await this.worker?.close();
-    await this.connection?.quit();
     this.transporter?.close();
   }
 

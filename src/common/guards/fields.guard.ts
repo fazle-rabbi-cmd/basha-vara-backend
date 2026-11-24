@@ -3,14 +3,14 @@ import { Reflector } from '@nestjs/core';
 import { SystemPermission } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { FIELD_PERMISSIONS_KEY } from '../decorators/fields.decorator.js';
-import { RedisService } from '../services/redis.service.js';
+import { CacheService } from '../services/cache.service.js';
 
 @Injectable()
 export class FieldPermissionsGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
-    private redis: RedisService,
+    private cache: CacheService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -43,7 +43,7 @@ export class FieldPermissionsGuard implements CanActivate {
 
   private async getUserPermissions(roles: string[]): Promise<SystemPermission[]> {
     const cacheKey = `user_permissions:${roles.join(',')}`;
-    const cached = await this.redis.get(cacheKey);
+    const cached = await this.cache.get(cacheKey);
 
     if (cached) {
       return JSON.parse(cached);
@@ -63,7 +63,7 @@ export class FieldPermissionsGuard implements CanActivate {
     });
 
     const permissions = rolePermissions.map((rp) => rp.permission.name as SystemPermission);
-    await this.redis.set(cacheKey, JSON.stringify(permissions), 3600);
+    await this.cache.set(cacheKey, JSON.stringify(permissions), 3600);
 
     return permissions;
   }

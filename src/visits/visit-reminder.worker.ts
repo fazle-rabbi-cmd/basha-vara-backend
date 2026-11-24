@@ -85,9 +85,7 @@ export class VisitReminderWorker {
       const reminderTime = new Date(scheduledStart.getTime() - hours * 60 * 60 * 1000);
 
       if (reminderTime > new Date()) {
-        await this.pgBoss.schedule('visit-reminder', { visitId, reminderHours: hours }, {
-          startAfter: reminderTime,
-        });
+        await this.pgBoss.scheduleAfter('visit-reminder', reminderTime, { visitId, reminderHours: hours });
         this.logger.log(`Scheduled ${hours}h reminder for visit ${visitId} at ${reminderTime.toISOString()}`);
       }
     }

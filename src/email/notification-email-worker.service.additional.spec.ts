@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { vi } from 'vitest';
 import { NotificationEmailWorkerService } from './notification-email-worker.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import { ConfigService } from '@nestjs/config';
 
 describe('NotificationEmailWorkerService - Additional Tests', () => {
@@ -26,7 +27,6 @@ describe('NotificationEmailWorkerService - Additional Tests', () => {
           SMTP_PASS: 'test-password',
           SMTP_PORT: '587',
           SMTP_SECURE: 'false',
-          REDIS_URL: 'redis://localhost:6379',
           FRONTEND_URL: 'http://localhost:3000',
         };
         return config[key];
@@ -50,6 +50,10 @@ describe('NotificationEmailWorkerService - Additional Tests', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: PgBossService,
+          useValue: { work: vi.fn() },
         },
       ],
     }).compile();

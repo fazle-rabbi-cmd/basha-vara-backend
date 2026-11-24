@@ -29,9 +29,7 @@ export class ApplicationPaymentDeadlineWorker {
     this.logger.log('Application payment deadline worker registered');
 
     // Schedule hourly check for expired deadlines
-    await this.pgBoss.schedule('application-payment-deadline-check', {}, {
-      cron: '0 * * * *',
-    });
+    await this.pgBoss.schedule('application-payment-deadline-check', '0 * * * *', {});
 
     this.logger.log('Scheduled hourly payment deadline check');
   }
@@ -104,9 +102,7 @@ export class ApplicationPaymentDeadlineWorker {
 
   async schedulePaymentDeadline(applicationId: string, deadline: Date) {
     if (deadline > new Date()) {
-      await this.pgBoss.schedule('application-payment-deadline', { applicationId }, {
-        startAfter: deadline,
-      });
+      await this.pgBoss.scheduleAfter('application-payment-deadline', deadline, { applicationId });
       this.logger.log(`Scheduled payment deadline for application ${applicationId} at ${deadline.toISOString()}`);
     }
   }

@@ -205,6 +205,7 @@ model Property {
   quietHoursStart     String?             // e.g., '22:00' for 10 PM
   quietHoursEnd       String?             // e.g., '06:00' for 6 AM
   preferredGender     String?             // 'MALE', 'FEMALE', 'ANY'
+  balconyCount        Int?                // Number of balconies
   
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt

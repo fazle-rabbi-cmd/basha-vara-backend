@@ -1,24 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { vi } from 'vitest';
 import { NotificationEmailQueueService } from './notification-email-queue.service.js';
+import { PgBossService } from '../pg-boss/pg-boss.service.js';
 import { NOTIFICATION_EMAIL_QUEUE } from './notification-email.types.js';
 
 describe('NotificationEmailQueueService', () => {
   let service: NotificationEmailQueueService;
-  let mockQueue: any;
+  let mockPgBoss: any;
 
   beforeEach(async () => {
-    mockQueue = {
-      add: vi.fn(),
-      close: vi.fn(),
+    mockPgBoss = {
+      send: vi.fn().mockResolvedValue('job-id-1'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationEmailQueueService,
         {
-          provide: NOTIFICATION_EMAIL_QUEUE,
-          useValue: mockQueue,
+          provide: PgBossService,
+          useValue: mockPgBoss,
         },
       ],
     }).compile();
@@ -26,8 +26,12 @@ describe('NotificationEmailQueueService', () => {
     service = module.get<NotificationEmailQueueService>(NotificationEmailQueueService);
   });
 
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   describe('queueNotificationEmail', () => {
-    it('should queue notification email', async () => {
+    it('should queue notification email via pg-boss', async () => {
       await service.queueNotificationEmail('user-1', 'NEW_VISIT_REQUEST', {
         propertyTitle: 'Test Property',
         tenantName: 'Test Tenant',
@@ -36,8 +40,8 @@ describe('NotificationEmailQueueService', () => {
         visitId: 'visit-1',
       });
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'NEW_VISIT_REQUEST',
+      expect(mockPgBoss.send).toHaveBeenCalledWith(
+        NOTIFICATION_EMAIL_QUEUE,
         {
           userId: 'user-1',
           purpose: 'NEW_VISIT_REQUEST',
@@ -47,11 +51,8 @@ describe('NotificationEmailQueueService', () => {
           }),
         },
         expect.objectContaining({
-          jobId: expect.stringContaining('new_visit_request-user-1'),
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 30_000 },
-          removeOnComplete: true,
-          removeOnFail: { age: 86_400 },
+          retryLimit: 3,
+          retryBackoff: true,
         })
       );
     });
@@ -63,22 +64,14 @@ describe('NotificationEmailQueueService', () => {
         applicationId: 'app-1',
       });
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'NEW_APPLICATION',
+      expect(mockPgBoss.send).toHaveBeenCalledWith(
+        NOTIFICATION_EMAIL_QUEUE,
         expect.objectContaining({
           userId: 'user-1',
           purpose: 'NEW_APPLICATION',
         }),
         expect.any(Object)
       );
-    });
-  });
-
-  describe('onModuleDestroy', () => {
-    it('should close queue on module destroy', async () => {
-      await service.onModuleDestroy();
-
-      expect(mockQueue.close).toHaveBeenCalled();
     });
   });
 });
