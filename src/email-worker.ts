@@ -1,10 +1,15 @@
 import { NestFactory } from '@nestjs/core';
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AuthEmailWorkerModule } from './email/auth-email-worker.module.js';
 import { NotificationEmailWorkerModule } from './email/notification-email-worker.module.js';
 
 @Module({
-  imports: [AuthEmailWorkerModule, NotificationEmailWorkerModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    AuthEmailWorkerModule,
+    NotificationEmailWorkerModule,
+  ],
 })
 class CombinedEmailWorkerModule {}
 
