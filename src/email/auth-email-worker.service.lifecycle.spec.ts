@@ -62,7 +62,7 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
       };
       await buildService();
 
-      service.onModuleInit();
+      await service.onModuleInit();
 
       expect(service['brevoApiKey']).toBe('test-brevo-key');
       expect(service['transporter']).toBeUndefined();
@@ -80,7 +80,7 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
       };
       await buildService();
 
-      service.onModuleInit();
+      await service.onModuleInit();
 
       expect(service['brevoApiKey']).toBeUndefined();
       expect(service['transporter']).toBeDefined();
@@ -93,7 +93,7 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
       };
       await buildService();
 
-      expect(() => service.onModuleInit()).toThrow(/Configure EMAIL_FROM/);
+      await expect(service.onModuleInit()).rejects.toThrow(/Configure EMAIL_FROM/);
     });
 
     it('should throw when neither Brevo nor SMTP configured', async () => {
@@ -102,7 +102,7 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
       };
       await buildService();
 
-      expect(() => service.onModuleInit()).toThrow(/Configure EMAIL_FROM/);
+      await expect(service.onModuleInit()).rejects.toThrow(/Configure EMAIL_FROM/);
     });
   });
 
@@ -113,7 +113,7 @@ describe('AuthEmailWorkerService - Lifecycle', () => {
         BREVO_API_KEY: 'test-brevo-key',
       };
       await buildService();
-      service.onModuleInit();
+      await service.onModuleInit();
 
       service['transporter'] = { close: vi.fn() } as any;
 

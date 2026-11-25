@@ -15,6 +15,7 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { NotificationEmailQueueService } from '../email/notification-email-queue.service.js';
 import { NotificationDigestService } from '../email/notification-digest.service.js';
 import { OtpService } from '../common/services/otp.service.js';
+import { OtpHasher } from './domain/otp-hasher.js';
 import { WorkflowAuditService } from '../common/services/workflow-audit.service.js';
 import { IcsGeneratorService } from './services/ics-generator.service.js';
 import { VisitDeclineReasonCode } from './domain/visit.types.js';
@@ -25,6 +26,10 @@ import { vi } from 'vitest';
 
 describe('VisitsService', () => {
   let service: VisitsService;
+
+  // parseSlotDateTime interprets slot times as Bangladesh time (UTC+6).
+  // Shift "now" by +6h so UTC getters produce the correct BD wall-clock time.
+  const getBdNow = () => new Date(Date.now() + 6 * 60 * 60 * 1000);
 
   const mockPrismaService = {
     visitRequest: {
@@ -578,8 +583,7 @@ describe('VisitsService', () => {
     const tenantId = 'tenant-1';
     const rawOtp = '482910';
     const salt = 'abcdef1234567890abcdef1234567890';
-    // sha256 HMAC of 482910 with salt
-    const otpHashed = '9d32d0cfd6ba0ce5a528e5dbec66223bc74d8de1cb27f05259451167dc0db12f';
+    const otpHashed = OtpHasher.hashOtp(rawOtp, salt);
 
     describe('getTenantCheckInCode', () => {
       it('should allow tenant to retrieve their check-in display code when window is active', async () => {
@@ -657,7 +661,7 @@ describe('VisitsService', () => {
       });
 
       it('should allow landlord to verify matching code, awarding IN_PERSON_VERIFIED badge', async () => {
-        const now = new Date();
+        const now = getBdNow();
         const visit = {
           id: visitId,
           propertyId: 'prop-1',
@@ -703,7 +707,7 @@ describe('VisitsService', () => {
       });
 
       it('should reject incorrect code, incrementing failed attempts', async () => {
-        const now = new Date();
+        const now = getBdNow();
         const visit = {
           id: visitId,
           propertyId: 'prop-1',
@@ -739,7 +743,7 @@ describe('VisitsService', () => {
       });
 
       it('should lock verification on 5th failed attempt and throw ForbiddenException', async () => {
-        const now = new Date();
+        const now = getBdNow();
         const visit = {
           id: visitId,
           propertyId: 'prop-1',
