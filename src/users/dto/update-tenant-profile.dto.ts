@@ -1,7 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { PropertyType } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsDate, IsEnum, IsInt, IsNumber, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
 
 export class UpdateTenantProfileDto {
   @ApiPropertyOptional({ example: 'Senior Software Engineer' })
@@ -13,12 +12,6 @@ export class UpdateTenantProfileDto {
   @IsOptional()
   @IsString()
   maritalStatus?: string;
-
-  @ApiPropertyOptional({ example: '2026-12-01T00:00:00.000Z' })
-  @IsOptional()
-  @Type(() => Date)
-  @IsDate()
-  moveInDatePreference?: Date;
 
   @ApiPropertyOptional({ example: 4, minimum: 1 })
   @IsOptional()
@@ -89,12 +82,6 @@ export class UpdateTenantProfileDto {
   @IsString()
   nationality?: string;
 
-  @ApiPropertyOptional({ example: ['Dhanmondi', 'Mirpur DOHS', 'Lalmatia'] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  preferredLocations?: string[];
-
   @ApiPropertyOptional({ example: 25000 })
   @IsOptional()
   @Type(() => Number)
@@ -108,12 +95,6 @@ export class UpdateTenantProfileDto {
   @IsNumber()
   @Min(0)
   budgetMax?: number;
-
-  @ApiPropertyOptional({ enum: PropertyType, isArray: true, example: [PropertyType.APARTMENT, PropertyType.FLAT] })
-  @IsOptional()
-  @IsArray()
-  @IsEnum(PropertyType, { each: true })
-  preferredPropertyTypes?: PropertyType[];
 
   @ApiPropertyOptional({ example: 'Looking for a peaceful, well-ventilated apartment with generator backup.' })
   @IsOptional()

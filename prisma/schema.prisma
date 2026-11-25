@@ -52,7 +52,6 @@ model User {
   reviewsReceived             Review[]               @relation("Reviewee")
   rentPaymentsAcknowledged    RentPayment[]          @relation("RentPaymentAcknowledger")
   trustScoreHistory           TrustScoreHistory[]    @relation("TrustScoreHistory")
-  documentAccessLogs          DocumentAccessLog[]    @relation("DocumentAccessLogs")
   notificationPreferences     NotificationPreference[] @relation("NotificationPreferences")
 
   @@index([email])
@@ -132,11 +131,8 @@ model TenantProfile {
   gender                 String?        // 'MALE', 'FEMALE', 'OTHER'
   religion               String?        // Religion (optional)
   nationality            String?        // Nationality (optional)
-  moveInDatePreference   DateTime?
-  preferredLocations     String[]       @default([])
   budgetMin              Decimal?       @db.Decimal(12, 2)
   budgetMax              Decimal?       @db.Decimal(12, 2)
-  preferredPropertyTypes PropertyType[] @default([])
   bio                    String?
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
@@ -151,8 +147,6 @@ model LandlordProfile {
   businessName      String?
   contactPreference String?
   bio               String?
-  verified          Boolean  @default(false)
-  responseRate      Int      @default(100)
   trustScore        Int      @default(100)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -998,24 +992,6 @@ model TrustScoreHistory {
   @@index([eventType])
   @@index([createdAt])
   @@map("trust_score_history")
-}
-
-model DocumentAccessLog {
-  id              String   @id @default(uuid()) @db.Uuid
-  documentType    String   // NID, INCOME_PROOF, OWNERSHIP_DEED, UTILITY_BILL, OTHER
-  documentId      String   @db.Uuid
-  userId          String   @db.Uuid
-  accessType      String   // VIEW, DOWNLOAD, UPLOAD
-  ipAddress       String?
-  userAgent       String?
-  createdAt       DateTime @default(now())
-
-  user            User     @relation("DocumentAccessLogs", fields: [userId], references: [id])
-
-  @@index([documentType, documentId])
-  @@index([userId])
-  @@index([createdAt])
-  @@map("document_access_logs")
 }
 
 model NotificationPreference {
