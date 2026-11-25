@@ -25,7 +25,7 @@ export class PoliceVerificationService {
 
     const tenant = await this.prisma.user.findUnique({
       where: { id: dto.tenantId },
-      include: { tenantProfile: true, applicationProfile: true, userDocuments: true },
+      include: { tenantProfile: true, userDocuments: true },
     });
 
     if (!tenant) {
@@ -65,7 +65,7 @@ export class PoliceVerificationService {
       where: { id: verificationId },
       include: {
         tenant: {
-          include: { tenantProfile: true, applicationProfile: true, userDocuments: true },
+          include: { tenantProfile: true, userDocuments: true },
         },
         property: true,
         landlord: true,
@@ -209,10 +209,10 @@ export class PoliceVerificationService {
       tenantNid: nidDocument?.fileName || 'Not provided',
       tenantPhone: tenant.phone || '',
       tenantEmail: tenant.email,
-      tenantAddress: tenant.applicationProfile?.address || '',
-      tenantOccupation: tenant.tenantProfile?.occupation || tenant.applicationProfile?.employmentStatus || '',
-      tenantEmployer: tenant.applicationProfile?.employerName || '',
-      tenantMonthlyIncome: tenant.applicationProfile?.monthlyIncome?.toString() || '',
+      tenantAddress: '',
+      tenantOccupation: tenant.tenantProfile?.occupation || '',
+      tenantEmployer: '',
+      tenantMonthlyIncome: '',
       profilePhoto,
       propertyTitle: property.title,
       propertyAddress: `${property.addressLine}, ${property.area}, ${property.city}`,

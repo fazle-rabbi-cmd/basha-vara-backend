@@ -29,7 +29,6 @@ describe('PoliceVerificationService', () => {
     email: 't@e.com',
     avatarUrl: 'https://avatar.url',
     tenantProfile: { occupation: 'Engineer' },
-    applicationProfile: { address: 'Tenant Addr', employerName: 'Corp', monthlyIncome: 50000 },
     userDocuments: [{ documentType: 'id', fileName: 'nid.pdf' }],
   };
 
@@ -138,7 +137,6 @@ describe('PoliceVerificationService', () => {
         phone: null,
         avatarUrl: null,
         tenantProfile: null,
-        applicationProfile: null,
         userDocuments: [],
       });
       prisma.policeVerification.findFirst.mockResolvedValue(null);
@@ -155,7 +153,7 @@ describe('PoliceVerificationService', () => {
   describe('generatePdf', () => {
     const fullVerification = {
       ...verification,
-      tenant: { ...tenant, tenantProfile: tenant.tenantProfile, applicationProfile: tenant.applicationProfile, userDocuments: tenant.userDocuments },
+      tenant: { ...tenant, tenantProfile: tenant.tenantProfile, userDocuments: tenant.userDocuments },
       property,
       landlord: property.landlord,
       formData: {
